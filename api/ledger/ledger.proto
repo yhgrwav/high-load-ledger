@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package api.ledger;
+
+
+option go_package = "github.com/yhgrwav/high-load-ledger/gen/go/ledger;ledger";
+
+service LedgerService {
+  rpc Transfer(TransferRequest) returns (TransferResponse);
+}
+
+message TransferRequest {
+  bytes idempotency_key = 1;
+  bytes user_from_id = 2;
+  bytes user_to_id = 3;
+  int64 amount = 4;
+  Currency currency = 5;
+}
+
+message TransferResponse {
+  bytes transaction_id = 1;
+  TransactionStatus status = 2;
+}
+
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+  CURRENCY_EUR = 2;
+  CURRENCY_RUB = 3;
+  CURRENCY_BYN = 4;
+}
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNKNOWN = 0;
+  TRANSACTION_STATUS_PENDING = 1;
+  TRANSACTION_STATUS_COMPLETED = 2;
+  TRANSACTION_STATUS_FAILED = 3;
+}
