@@ -32,9 +32,8 @@
 - **Deployment:** Docker Compose, Makefile
 
 ## 📈 План развития (Roadmap)
-- [ ] Реализация Unit и Integration тестов для слоя UseCase.
 - [ ] Внедрение Prometheus метрик (RPS, Latency, Kafka Lag).
-- [ ] Настройка Structured Logging (Uber Zap) для распределенной трассировки.
+- [ ] Настройка Structured Logging для распределенной трассировки.
 
 ## 🚀 Быстрый запуск
 
@@ -44,3 +43,6 @@ make run
 
 # Прогнать тесты
 make test
+
+## Точки оптимизации
+1. использование bytes вместо строки
