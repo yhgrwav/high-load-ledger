@@ -1,9 +1,19 @@
-.PHONY: gen
+PROJECT_ROOT := $(CURDIR)
+export PROJECT_ROOT
+
+SHELL := powershell.exe
+.SHELLFLAGS := -NoProfile -Command
+
+.PHONY: gen migrate-create
 
 gen:
-	mkdir -p gen/go/ledger
-
+	if (Test-Path gen/go/ledger) { Remove-Item -Recurse -Force gen/go/ledger }
+	New-Item -ItemType Directory -Force -Path gen/go/ledger
 	protoc -I api/ledger \
 		--go_out=gen/go/ledger --go_opt=paths=source_relative \
 		--go-grpc_out=gen/go/ledger --go-grpc_opt=paths=source_relative \
 		api/ledger/ledger.proto
+
+migrate-create:
+	docker compose run --rm ledger-app-migrate \
+		create -ext sql -dir /migrations -seq $(if $(name),$(name),init_schema)
