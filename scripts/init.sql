@@ -1,0 +1,1 @@
+CREATE USER default_user WITH PASSWORD 'password';
