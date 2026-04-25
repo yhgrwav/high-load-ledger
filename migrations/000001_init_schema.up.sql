@@ -13,7 +13,7 @@ CREATE TABLE ledger.accounts IF NOT EXISTS (
     user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     amount BIGINT NOT NULL DEFAULT 0 CHECK(amount >= 0),
     currency SMALLINT NOT NULL
-
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS ledger.transactions (
