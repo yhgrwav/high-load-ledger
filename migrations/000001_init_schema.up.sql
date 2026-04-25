@@ -16,6 +16,15 @@ CREATE TABLE ledger.accounts IF NOT EXISTS (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
+CREATE OR REPLACE FUNCTION ledger.set_updated_at() ... ;
+
+DROP TRIGGER IF EXISTS trg_accounts_updated_at ON ledger.accounts;
+CREATE TRIGGER trg_accounts_updated_at
+    BEFORE UPDATE ON ledger.accounts
+    FOR EACH ROW
+    EXECUTE FUNCTION ledger.set_updated_at();
+
+
 CREATE TABLE IF NOT EXISTS ledger.transactions (
     id UUID PRIMARY KEY uuid_generate_v4(),
     user_from UUID FOREIGN KEY NOT NULL REFERENCES ledger.accounts(user_id),
