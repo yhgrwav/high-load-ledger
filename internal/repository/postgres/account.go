@@ -21,14 +21,19 @@ func (db *Repository) CreateAccount(ctx context.Context, acc *entity.Account) er
 	return nil
 }
 
-func (db *Repository) GetForUpdate(ctx context.Context, id uuid.UUID) (*entity.Account, error) {
+func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
+	pgTx, ok := tx.(pgx.Tx) // pool || tx || nil
+	if !ok {
+		return nil, entity.ErrInvalidTxType
+	}
+
 	query := `SELECT user_id, amount, currency, updated_at 
 			  FROM ledger.accounts
 			  WHERE user_id = $1
 			  FOR UPDATE`
 	var account entity.Account
 
-	err := db.pool.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
+	err := pgTx.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, entity.ErrAccountNotFound
@@ -54,11 +59,17 @@ func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Accoun
 	return &account, nil
 }
 
-func (db *Repository) UpdateBalance(ctx context.Context, id uuid.UUID, amount int64) error {
+func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+
+	pgTx, ok := tx.(pgx.Tx) // pool || pgx || nil
+	if !ok {
+		return entity.ErrInvalidTxType
+	}
+
 	query := `UPDATE ledger.accounts
               SET balance = balance+$1
               WHERE id = $2`
-	_, err := db.pool.Exec(ctx, query, amount, id)
+	_, err := pgTx.Exec(ctx, query, amount, id)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
 		return fmt.Errorf("db: failed to update balance: %w", err)
