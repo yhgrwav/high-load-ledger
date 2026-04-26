@@ -7,4 +7,5 @@ var (
 
 	ErrTransactionNotFound     = errors.New("transaction not found")
 	ErrDuplicateIdempotencyKey = errors.New("idempotency key already exists")
+	ErrInvalidTxType           = errors.New("invalid transaction type")
 )
