@@ -55,5 +55,13 @@ func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Accoun
 }
 
 func (db *Repository) UpdateBalance(ctx context.Context, id uuid.UUID, amount int64) error {
-
+	query := `UPDATE ledger.accounts
+              SET balance = balance+$1
+              WHERE id = $2`
+	_, err := db.pool.Exec(ctx, query, amount, id)
+	if err != nil {
+		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
+		return fmt.Errorf("db: failed to update balance: %w", err)
+	}
+	return nil
 }
