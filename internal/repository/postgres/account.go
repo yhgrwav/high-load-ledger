@@ -65,3 +65,16 @@ func (db *Repository) UpdateBalance(ctx context.Context, id uuid.UUID, amount in
 	}
 	return nil
 }
+
+func (db *Repository) BeginAccountTx(ctx context.Context) (entity.CustomTx, error) {
+	tx, err := db.pool.Begin(ctx)
+	return tx, err
+}
+
+func (db *Repository) CommitAccountTx(ctx context.Context, tx entity.CustomTx) error {
+	return tx.(pgx.Tx).Commit(ctx)
+}
+
+func (db *Repository) RollbackAccountTx(ctx context.Context, tx entity.CustomTx) error {
+	return tx.(pgx.Tx).Rollback(ctx)
+}
