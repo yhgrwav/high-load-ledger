@@ -22,9 +22,9 @@ func (db *Repository) CreateAccount(ctx context.Context, acc *entity.Account) er
 }
 
 func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
-	pgTx, ok := tx.(pgx.Tx) // pool || tx || nil
-	if !ok {
-		return nil, entity.ErrInvalidTxType
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	query := `SELECT user_id, amount, currency, updated_at 
@@ -33,7 +33,7 @@ func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id u
 			  FOR UPDATE`
 	var account entity.Account
 
-	err := pgTx.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
+	err = t.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, entity.ErrAccountNotFound
@@ -47,29 +47,30 @@ func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id u
 func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Account, error) {
 	query := `select user_id, amount, currency, updated_at 
 		  FROM ledger.accounts
-		  WHERE id = $1`
+		  WHERE user_id = $1`
 	var account entity.Account
-	err := db.pool.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency)
+	err := db.pool.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, entity.ErrAccountNotFound
 		}
 		db.logger.ErrorContext(ctx, "db: failed to get account", "err", err, "id", id)
+		return nil, fmt.Errorf("db: failed to get account: %w", err)
 	}
 	return &account, nil
 }
 
 func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
 
-	pgTx, ok := tx.(pgx.Tx) // pool || pgx || nil
-	if !ok {
-		return entity.ErrInvalidTxType
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
 	}
 
 	query := `UPDATE ledger.accounts
-              SET amount = amount+$1
+              SET amount = $1, updated_at = CURRENT_TIMESTAMP
               WHERE user_id = $2`
-	_, err := pgTx.Exec(ctx, query, amount, id)
+	_, err = t.Exec(ctx, query, amount, id)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
 		return fmt.Errorf("db: failed to update balance: %w", err)
@@ -79,22 +80,35 @@ func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id 
 
 func (db *Repository) BeginAccountTx(ctx context.Context) (entity.CustomTx, error) {
 	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		db.logger.ErrorContext(ctx, "db: failed to begin account transaction", "err", err)
+		return nil, fmt.Errorf("db: failed to begin account transaction: %w", err)
+	}
 	return tx, err
 }
 
 func (db *Repository) CommitAccountTx(ctx context.Context, tx entity.CustomTx) error {
-	return tx.(pgx.Tx).Commit(ctx)
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return t.Commit(ctx)
 }
 
 func (db *Repository) RollbackAccountTx(ctx context.Context, tx entity.CustomTx) error {
-	return tx.(pgx.Tx).Rollback(ctx)
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return t.Rollback(ctx)
 }
 
-// castTx - локальная вспомогательная функция, которая будет типизировать тип any в pgx.Tx (конкретно в этой реализации)
+// castTx - локальная вспомогательный метод, который будет типизировать тип any в pgx.Tx (конкретно в этой реализации)
 // и будет возвращать сущность, с которой будет удобно работать внутри других методов, а также этот метод поможет избежать
 // дублирования кода, что способствует реализации принципа DRY
-func castTx(ctx context.Context, tx entity.CustomTx) (pgx.Tx, error) {
+func (db *Repository) castTx(ctx context.Context, tx entity.CustomTx) (pgx.Tx, error) {
 	if tx == nil {
+		db.logger.ErrorContext(ctx, "db: failed to cast tx")
 		return nil, entity.ErrInvalidTxType
 	}
 	pgTx, ok := tx.(pgx.Tx)
