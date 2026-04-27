@@ -67,8 +67,8 @@ func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id 
 	}
 
 	query := `UPDATE ledger.accounts
-              SET balance = balance+$1
-              WHERE id = $2`
+              SET amount = amount+$1
+              WHERE user_id = $2`
 	_, err := pgTx.Exec(ctx, query, amount, id)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
