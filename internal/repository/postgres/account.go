@@ -89,3 +89,17 @@ func (db *Repository) CommitAccountTx(ctx context.Context, tx entity.CustomTx) e
 func (db *Repository) RollbackAccountTx(ctx context.Context, tx entity.CustomTx) error {
 	return tx.(pgx.Tx).Rollback(ctx)
 }
+
+// castTx - локальная вспомогательная функция, которая будет типизировать тип any в pgx.Tx (конкретно в этой реализации)
+// и будет возвращать сущность, с которой будет удобно работать внутри других методов, а также этот метод поможет избежать
+// дублирования кода, что способствует реализации принципа DRY
+func castTx(ctx context.Context, tx entity.CustomTx) (pgx.Tx, error) {
+	if tx == nil {
+		return nil, entity.ErrInvalidTxType
+	}
+	pgTx, ok := tx.(pgx.Tx)
+	if !ok {
+		return nil, entity.ErrInvalidTxType
+	}
+	return pgTx, nil
+}
