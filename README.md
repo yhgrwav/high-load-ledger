@@ -1,14 +1,10 @@
-# 💸 High-Load Distributed Ledger Core
+#  High-Load Distributed Ledger Core
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/yhgrwav/high-load-ledger)](https://goreportcard.com/report/github.com/yhgrwav/high-load-ledger)
-![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
-![Kafka](https://img.shields.io/badge/Message_Broker-Kafka-black?logo=apachekafka)
-![Postgres](https://img.shields.io/badge/DB-PostgreSQL-blue?logo=postgresql)
-![Redis](https://img.shields.io/badge/Cache-Redis-red?logo=redis)
+
 
 Высокопроизводительное ядро платежной системы с асинхронной моделью обработки транзакций. Проект спроектирован для работы в условиях высокой конкурентности и гарантирует целостность данных (ACID) при обработке финансовых потоков.
 
-## 🏗 Архитектурные решения (Design Decisions)
+##  Архитектурные решения (Design Decisions)
 
 Система разделена на два независимых слоя для обеспечения максимальной пропускной способности:
 
@@ -35,14 +31,14 @@
 - [ ] Внедрение Prometheus метрик (RPS, Latency, Kafka Lag).
 - [ ] Настройка Structured Logging для распределенной трассировки.
 
-## 🚀 Быстрый запуск
+##  Быстрый запуск
 
 ```bash
 # Поднять всю инфраструктуру и приложение
 make run
+```
 
-# Прогнать тесты
-make test
-
-## Точки оптимизации
+# Точки оптимизации
 1. использование bytes вместо строки
+2. все рассчёты исключительно на стороне сервиса в рамках дешёвых горутин
+3. методы создания записей о транзакциях рассчитаны на то, чтобы сделать записи в одну итерацию (отправитель, получатель и потенциально условный банк, получающий коммиссию), что уменьшает сетевую задержку и потенциальные потери 
