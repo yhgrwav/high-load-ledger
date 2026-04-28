@@ -8,6 +8,7 @@ import (
 )
 
 type PostingRepository interface {
-	CreateBatch(ctx context.Context, postings []entity.Posting) error
-	ListByAccountID(ctx context.Context, accountID uuid.UUID) ([]entity.Posting, error)
+	CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error
+	ListPostingsByAccountID(ctx context.Context, accountID uuid.UUID, limit, offset int) ([]entity.Posting, error)
+	GetBalanceFromPostings(ctx context.Context, accountID uuid.UUID) (int64, error)
 }
