@@ -40,4 +40,17 @@ func main() {
 
 	repo := postgres.NewConnectionPool(pool, lgr)
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	})
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		lgr.Error("Redis is unreachable", "error", err)
+		os.Exit(1)
+	}
+
+	redees.NewCacheRepository(rdb, lgr)
+
 }
