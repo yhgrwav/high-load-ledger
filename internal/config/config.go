@@ -23,7 +23,7 @@ type Config struct {
 	RedisHost     string `env:"REDIS_HOST, required"`
 	RedisPort     string `env:"REDIS_PORT, required"`
 	RedisPassword string `env:"REDIS_PASSWORD, required"`
-	RedisDB       string `env:"REDIS_DB" envDefault:"0"`
+	RedisDB       int    `env:"REDIS_DB" envDefault:"0"`
 
 	GRPCPort string `env:"GRPC_PORT" envDefault:"50051"`
 
