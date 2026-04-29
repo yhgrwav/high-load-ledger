@@ -8,7 +8,8 @@ import (
 )
 
 type TransactionRepository interface {
-	Create(ctx context.Context, tx *entity.Transaction) error
-	GetByIdempotencyKey(ctx context.Context, key uuid.UUID) (*entity.Transaction, error)
-	UpdateStatus(ctx context.Context, id uuid.UUID, status entity.TransactionStatus) error
+	CreateTransaction(ctx context.Context, tx *entity.Transaction, tr *entity.Transaction) error
+	GetTransactionByID(ctx context.Context, id uuid.UUID) (*entity.Transaction, error)
+	CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (*entity.Transaction, error)
+	UpdateStatus(ctx context.Context, tx entity.CustomTx, id uuid.UUID, status entity.TransactionStatus) error
 }
