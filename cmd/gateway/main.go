@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"high-load-ledger/internal/config"
 	"high-load-ledger/internal/infra/logger"
 	"high-load-ledger/internal/repository/postgres"
+	"high-load-ledger/internal/repository/redis"
 	"log"
 	"os"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
