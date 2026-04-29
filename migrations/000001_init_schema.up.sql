@@ -6,9 +6,6 @@ GRANT  CREATE ON SCHEMA ledger TO default_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA ledger
 GRANT ALL ON TABLE default_user;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
--- аккаунты - счета, т.к. логике не принципиальна какая-то метадата юзера, я решил не плодить
--- лишний мусор и оставить схему в формате счёт-транзакции и дополнительную таблицу для подсчёта результатов
 CREATE TABLE ledger.accounts IF NOT EXISTS (
     user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     amount BIGINT NOT NULL DEFAULT 0 CHECK(amount >= 0),
@@ -17,7 +14,7 @@ CREATE TABLE ledger.accounts IF NOT EXISTS (
 );
 
 CREATE TABLE IF NOT EXISTS ledger.transactions (
-    id UUID PRIMARY KEY uuid_generate_v4(),
+    id UUID PRIMARY KEY,
     user_from UUID FOREIGN KEY NOT NULL REFERENCES ledger.accounts(user_id),
     user_to UUID FOREIGN KEY NOT NULL REFERENCES ledger.accounts(user_id),
     currency SMALLINT NOT NULL,
