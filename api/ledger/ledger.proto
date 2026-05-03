@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package api.ledger;
+
+option go_package = "github.com/yhgrwav/high-load-ledger/gen/go/ledger;ledger";
+
+service AccountService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+service TransactionService {
+  rpc Transfer(TransferRequest) returns (TransferResponse);
+}
+
+service StatsService {
+  rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
+  rpc UpdateTransactionStatus(UpdateStatusRequest) returns (UpdateStatusResponse);
+}
+
+message TransferRequest {
+  bytes idempotency_key = 1;
+  bytes user_from_id = 2;
+  bytes user_to_id = 3;
+  int64 amount = 4;
+  Currency currency = 5;
+}
+
+message TransferResponse {
+  bytes transaction_id = 1;
+  TransactionStatus status = 2;
+}
+
+message CreateAccountRequest {
+  bytes user_id = 1;
+  Currency currency = 2;
+}
+
+message CreateAccountResponse {
+  bytes account_id = 1;
+}
+
+message GetBalanceRequest {
+  bytes account_id = 1;
+  bytes requester_id = 2;
+}
+
+message GetBalanceResponse {
+  int64 balance = 1;
+  Currency currency = 2;
+}
+
+message GetTransactionRequest {
+  bytes transaction_id = 1;
+}
+
+message GetTransactionResponse {
+  bytes id = 1;
+  bytes user_from = 2;
+  bytes user_to = 3;
+  int64 amount = 4;
+  Currency currency = 5;
+  TransactionStatus status = 6;
+}
+
+message UpdateStatusRequest {
+  bytes transaction_id = 1;
+  TransactionStatus status = 2;
+}
+
+message UpdateStatusResponse {
+  bool success = 1;
+}
+
+enum Currency {
+  CURRENCY_UNSPECIFIED = 0;
+  CURRENCY_USD = 1;
+  CURRENCY_EUR = 2;
+  CURRENCY_RUB = 3;
+  CURRENCY_BYN = 4;
+}
+
+enum TransactionStatus {
+  STATUS_UNKNOWN = 0;
+  STATUS_PENDING = 1;
+  STATUS_COMPLETED = 2;
+  STATUS_FAILED = 3;
+}

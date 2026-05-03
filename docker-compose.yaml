@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ledger_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_SUPER_USER}
+      POSTGRES_PASSWORD: ${DB_SUPER_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ledger_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_SUPER_USER} -d ${DB_NAME}"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  ledger-app-migrate:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ./migrations:/migrations
+    networks:
+      - ledger_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - -path=/migrations/
+      - -database=postgres://${DB_SUPER_USER}:${DB_SUPER_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
+      - up
+
+  redis:
+    image: redis:7-alpine
+    container_name: ledger_redis
+    restart: always
+    ports:
+      - "${REDIS_PORT}:6379"
+    networks:
+      - ledger_network
+volumes:
+  postgres_data:
+
+networks:
+  ledger_network:
+    driver: bridge
