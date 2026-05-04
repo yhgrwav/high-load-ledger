@@ -9,3 +9,12 @@ const (
 	CURRENCY_RUB
 	CURRENCY_BYN
 )
+
+func (c Currency) IsValid() bool {
+	switch c {
+	case CURRENCY_USD, CURRENCY_EUR, CURRENCY_RUB, CURRENCY_BYN:
+		return true
+	default:
+		return false
+	}
+}
