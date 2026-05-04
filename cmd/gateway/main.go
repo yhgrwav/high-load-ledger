@@ -87,7 +87,7 @@ func main() {
 	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, cfg.RedisTransactionTTL)
 	accountUC := usecase.NewAccountUseCase(repo, lgr)
 
-	handler := transport.NewHandler(transferUC, accountUC)
+	handler := transport.NewHandler(transferUC, accountUC, lgr)
 	server := grpc.NewServer()
 
 	ledger.RegisterTransactionServiceServer(server, handler)
