@@ -11,4 +11,5 @@ var (
 	ErrSameAccountTransfer = errors.New("source and destination accounts must be different")
 	ErrInvalidCurrency     = errors.New("currency code is invalid or empty")
 	ErrEmptyIdempotencyKey = errors.New("idempotency key is required")
+	ErrInvalidUUID         = errors.New("UUID is invalid")
 )
