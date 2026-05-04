@@ -92,6 +92,7 @@ func main() {
 
 	ledger.RegisterTransactionServiceServer(server, handler)
 	ledger.RegisterAccountServiceServer(server, handler)
+	ledger.RegisterStatsServiceServer(server, handler)
 
 	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
 	if err != nil {
