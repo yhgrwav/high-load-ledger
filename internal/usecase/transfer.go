@@ -52,11 +52,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
-	err = t.repo.CreateTransaction(ctx, tr, &newTx)
-	if err != nil {
-		return uuid.Nil, err
-	}
-
 	defer func() {
 		if err != nil {
 			if rollbackErr := t.repo.RollbackTx(ctx, tr); rollbackErr != nil {
@@ -64,6 +59,11 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 			}
 		}
 	}()
+
+	err = t.repo.CreateTransaction(ctx, tr, &newTx)
+	if err != nil {
+		return uuid.Nil, err
+	}
 
 	err = t.repo.CommitTx(ctx, tr)
 	if err != nil {
