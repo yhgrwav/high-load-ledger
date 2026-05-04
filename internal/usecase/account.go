@@ -22,15 +22,25 @@ func NewAccountUseCase(repo repository.AccountRepository, logger *slog.Logger) *
 	}
 }
 
-func (a *AccountUseCase) CreateAccount(ctx context.Context, id uuid.UUID, currency entity.Currency) (uuid.UUID, error) {
+func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Currency) (uuid.UUID, error) {
+	if currency == entity.CURRENCY_UNSPECIFIED {
+		return uuid.Nil, entity.ErrInvalidCurrency
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		a.logger.ErrorContext(ctx, "service: error generating uuid for account: ", err)
+		return uuid.Nil, err
+	}
+
 	account := &entity.Account{
 		ID:        id,
 		Balance:   0,
 		Currency:  currency,
-		UpdatedAt: time.Now(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
-	err := a.repo.CreateAccount(ctx, account)
+	err = a.repo.CreateAccount(ctx, account)
 	if err != nil {
 		return uuid.Nil, err
 	}
