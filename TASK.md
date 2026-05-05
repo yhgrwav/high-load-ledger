@@ -10,10 +10,11 @@
 - Брокер сообщений: Apache Kafka
 - Кэширование и идемпотентность: Redis
 - Хранилище данных: PostgreSQL
+- observability: grafana, prometheus, slog, jaeger
 - Инфраструктура: Docker, Docker Compose, Makefile
 
 ### План реализации
-- [x] Protobuf контракт для AccountService, TransactionService
+- [x] Protobuf контракт для AccountService, TransactionService, StatsService
 - [x] Миграции для PostgreSQL (ledger schema, accounts/transactions/postings tables)
 - [x] Чистая архитектура (domain, repository, usecase, transport слои)
 - [x] Инициализация конфига из .env
@@ -26,3 +27,4 @@
 - [ ] Шардирование PostgreSQL (по user_id)
 - [ ] Kubernetes манифесты для деплоя
 - [ ] Микросервис для генерации нагрузки (load testing)
+- [ ] Интеграция Nginx
