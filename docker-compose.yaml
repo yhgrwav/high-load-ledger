@@ -35,6 +35,13 @@ services:
       - -database=postgres://${DB_SUPER_USER}:${DB_SUPER_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
       - up
 
+  prometheus:
+    image: prom/prometheus:v3.11.3
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "19090:9090"
+
   redis:
     image: redis:7-alpine
     container_name: ledger_redis
@@ -49,3 +56,4 @@ volumes:
 networks:
   ledger_network:
     driver: bridge
+
