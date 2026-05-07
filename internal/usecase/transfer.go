@@ -56,19 +56,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		}
 	}()
 
-	existing, err := t.repo.GetTransactionByIdempotencyKey(ctx, tr, req.IdempotencyKey)
-	switch {
-	case err != nil && !errors.Is(err, entity.ErrTransactionNotFound):
-		return uuid.Nil, err
-	case existing != nil:
-		err = t.repo.CommitTx(ctx, tr)
-		if err != nil {
-			return uuid.Nil, err
-		}
-		_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
-		return existing.ID, nil
-	}
-
 	fromAcc, toAcc, err := t.loadTransferAccounts(ctx, tr, req.FromAccountID, req.ToAccountID)
 	if err != nil {
 		return uuid.Nil, err
@@ -100,6 +87,14 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	if err = t.repo.CreateTransaction(ctx, tr, &newTx); err != nil {
+		if errors.Is(err, entity.ErrDuplicateIdempotencyKey) {
+			existing, checkErr := t.repo.CheckIdempotencyKey(ctx, req.IdempotencyKey)
+			if checkErr != nil {
+				return uuid.Nil, checkErr
+			}
+			_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
+			return existing.ID, nil
+		}
 		return uuid.Nil, err
 	}
 
