@@ -1,7 +1,9 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"log/slog"
@@ -10,14 +12,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type txAccRepo interface {
+	repository.TransactionRepository
+	repository.AccountRepository
+}
+
 type TransferUseCase struct {
-	repo              repository.TransactionRepository
+	repo              txAccRepo
 	cache             repository.CacheRepository
 	logger            *slog.Logger
 	idempotencyKeyTTL time.Duration
 }
 
-func NewTransferUseCase(repo repository.TransactionRepository, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration) *TransferUseCase {
+func NewTransferUseCase(repo txAccRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration) *TransferUseCase {
 	return &TransferUseCase{
 		repo:              repo,
 		cache:             cache,
@@ -27,24 +34,13 @@ func NewTransferUseCase(repo repository.TransactionRepository, cache repository.
 }
 
 func (t *TransferUseCase) Transaction(ctx context.Context, req entity.TransactionRequest) (uuid.UUID, error) {
-	if err := t.validateRequest(ctx, req); err != nil {
+	if err := t.validateRequest(req); err != nil {
 		return uuid.Nil, err
 	}
 
 	txID, err := t.checkIdempotency(ctx, req.IdempotencyKey)
 	if err == nil {
 		return txID, nil
-	}
-
-	newTx := entity.Transaction{
-		ID:             uuid.New(),
-		IdempotencyKey: req.IdempotencyKey,
-		FromAccountID:  req.FromAccountID,
-		ToAccountID:    req.ToAccountID,
-		Amount:         req.Amount,
-		Currency:       req.Currency,
-		Status:         entity.STATUS_PENDING,
-		CreatedAt:      time.Now(),
 	}
 
 	tr, err := t.repo.BeginTx(ctx)
@@ -54,14 +50,56 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 
 	defer func() {
 		if err != nil {
-			if rollbackErr := t.repo.RollbackTx(ctx, tr); rollbackErr != nil {
-				t.logger.ErrorContext(ctx, "failed to rollback transaction", "err", rollbackErr)
+			if err := t.repo.RollbackTx(ctx, tr); err != nil {
+				t.logger.ErrorContext(ctx, "failed to rollback transaction", "err", err)
 			}
 		}
 	}()
 
-	err = t.repo.CreateTransaction(ctx, tr, &newTx)
+	existing, err := t.repo.GetTransactionByIdempotencyKey(ctx, tr, req.IdempotencyKey)
+	switch {
+	case err != nil && !errors.Is(err, entity.ErrTransactionNotFound):
+		return uuid.Nil, err
+	case existing != nil:
+		err = t.repo.CommitTx(ctx, tr)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
+		return existing.ID, nil
+	}
+
+	fromAcc, toAcc, err := t.loadTransferAccounts(ctx, tr, req.FromAccountID, req.ToAccountID)
 	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if fromAcc.Currency != req.Currency || toAcc.Currency != req.Currency {
+		return uuid.Nil, entity.ErrCurrencyMismatch
+	}
+	if fromAcc.Balance < req.Amount {
+		return uuid.Nil, entity.ErrInsufficientFunds
+	}
+
+	if err = t.repo.UpdateBalance(ctx, tr, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
+		return uuid.Nil, err
+	}
+	if err = t.repo.UpdateBalance(ctx, tr, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
+		return uuid.Nil, err
+	}
+
+	newTx := entity.Transaction{
+		ID:             uuid.New(),
+		IdempotencyKey: req.IdempotencyKey,
+		FromAccountID:  req.FromAccountID,
+		ToAccountID:    req.ToAccountID,
+		Amount:         req.Amount,
+		Currency:       req.Currency,
+		Status:         entity.STATUS_COMPLETED,
+		CreatedAt:      time.Now(),
+	}
+
+	if err = t.repo.CreateTransaction(ctx, tr, &newTx); err != nil {
 		return uuid.Nil, err
 	}
 
@@ -77,8 +115,10 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 
 func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
 	val, err := t.cache.GetIdempotencyKey(ctx, key)
-	if err == nil {
-		return uuid.FromBytes(val)
+	if err == nil && len(val) == 16 {
+		if id, uerr := uuid.FromBytes(val); uerr == nil {
+			return id, nil
+		}
 	}
 
 	tr, err := t.repo.CheckIdempotencyKey(ctx, key)
@@ -94,7 +134,7 @@ func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (
 	return tr.ID, nil
 }
 
-func (t *TransferUseCase) validateRequest(ctx context.Context, req entity.TransactionRequest) error {
+func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
 	if req.Amount <= 0 {
 		return entity.ErrInvalidAmount
 	}
@@ -104,5 +144,29 @@ func (t *TransferUseCase) validateRequest(ctx context.Context, req entity.Transa
 	if req.IdempotencyKey == uuid.Nil {
 		return entity.ErrEmptyIdempotencyKey
 	}
+	if !req.Currency.IsValid() {
+		return entity.ErrInvalidCurrency
+	}
 	return nil
+}
+
+func (t *TransferUseCase) loadTransferAccounts(ctx context.Context, tr entity.CustomTx, fromID, toID uuid.UUID) (*entity.Account, *entity.Account, error) {
+	lockFirstID, lockSecondID := fromID, toID
+	if bytes.Compare(lockFirstID[:], lockSecondID[:]) > 0 {
+		lockFirstID, lockSecondID = lockSecondID, lockFirstID
+	}
+
+	lockFirstAcc, err := t.repo.GetForUpdate(ctx, tr, lockFirstID)
+	if err != nil {
+		return nil, nil, err
+	}
+	lockSecondAcc, err := t.repo.GetForUpdate(ctx, tr, lockSecondID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if lockFirstID == fromID {
+		return lockFirstAcc, lockSecondAcc, nil
+	}
+	return lockSecondAcc, lockFirstAcc, nil
 }
