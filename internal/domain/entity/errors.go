@@ -12,4 +12,7 @@ var (
 	ErrInvalidCurrency     = errors.New("currency code is invalid or empty")
 	ErrEmptyIdempotencyKey = errors.New("idempotency key is required")
 	ErrInvalidUUID         = errors.New("UUID is invalid")
+
+	ErrInsufficientFunds = errors.New("insufficient funds")
+	ErrCurrencyMismatch  = errors.New("account currency does not match transfer currency")
 )
