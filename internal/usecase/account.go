@@ -5,6 +5,7 @@ import (
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"log/slog"
+	"math/rand"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,9 +34,11 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 		return uuid.Nil, err
 	}
 
+	balance := rand.Int()
+
 	account := &entity.Account{
 		ID:        id,
-		Balance:   0,
+		Balance:   int64(balance),
 		Currency:  currency,
 		UpdatedAt: time.Now().UTC(),
 	}
