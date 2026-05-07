@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -40,12 +41,26 @@ func (h *Handler) Transfer(ctx context.Context, req *ledger.TransferRequest) (*l
 
 	txID, err := h.transferUC.Transaction(ctx, domainReq)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "transfer failed", "error", err)
-		return nil, status.Errorf(codes.Internal, "transfer failed: %v", err)
+		switch {
+		case errors.Is(err, entity.ErrInsufficientFunds),
+			errors.Is(err, entity.ErrCurrencyMismatch):
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		case errors.Is(err, entity.ErrAccountNotFound):
+			return nil, status.Error(codes.NotFound, err.Error())
+		default:
+			if errors.Is(err, entity.ErrInvalidAmount) ||
+				errors.Is(err, entity.ErrSameAccountTransfer) ||
+				errors.Is(err, entity.ErrEmptyIdempotencyKey) ||
+				errors.Is(err, entity.ErrInvalidCurrency) {
+				return nil, status.Error(codes.InvalidArgument, err.Error())
+			}
+			h.logger.ErrorContext(ctx, "transfer failed", "error", err)
+			return nil, status.Errorf(codes.Internal, "transfer failed: %v", err)
+		}
 	}
 
 	return &ledger.TransferResponse{
 		TransactionId: txID[:],
-		Status:        ledger.TransactionStatus_STATUS_PENDING,
+		Status:        ledger.TransactionStatus_STATUS_COMPLETED,
 	}, nil
 }
