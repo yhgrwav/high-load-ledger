@@ -3,7 +3,6 @@ package usecase
 import (
 	"bytes"
 	"context"
-	"errors"
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"log/slog"
@@ -87,11 +86,8 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	if err = t.repo.CreateTransaction(ctx, tr, &newTx); err != nil {
-		if errors.Is(err, entity.ErrDuplicateIdempotencyKey) {
-			existing, checkErr := t.repo.CheckIdempotencyKey(ctx, req.IdempotencyKey)
-			if checkErr != nil {
-				return uuid.Nil, checkErr
-			}
+		existing, err := t.repo.CheckIdempotencyKey(ctx, req.IdempotencyKey)
+		if err == nil {
 			_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
 			return existing.ID, nil
 		}
