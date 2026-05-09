@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"high-load-ledger/internal/infra/telemetry"
+	"high-load-ledger/internal/transport/grpc/interceptors"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
@@ -43,6 +47,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	metrics := telemetry.NewPrometheusMetrics(cfg.ServiceName)
+
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(metrics)),
+	)
 
 	lgr := logger.New(cfg.LogLevel, cfg.AddSource, cfg.IsJSON)
 	lgr.Info("Ledger starting...", "user", cfg.DBUser, "host", cfg.DBHost)
@@ -88,7 +98,6 @@ func main() {
 	accountUC := usecase.NewAccountUseCase(repo, lgr)
 
 	handler := transport.NewHandler(transferUC, accountUC, lgr)
-	server := grpc.NewServer()
 
 	ledger.RegisterTransactionServiceServer(server, handler)
 	ledger.RegisterAccountServiceServer(server, handler)
@@ -99,6 +108,16 @@ func main() {
 		lgr.Error("failed to listen", "error", err)
 		os.Exit(1)
 	}
+
+	metrix := fmt.Sprintf(":%s", cfg.MetricsPort)
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		lgr.Info("Prometheus metrics server is running", "port", cfg.MetricsPort)
+		if err := http.ListenAndServe(metrix, nil); err != nil {
+			lgr.Error("failed to serve metrics", "error", err)
+		}
+	}()
 
 	lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
 	if err := server.Serve(lis); err != nil {
