@@ -8,7 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.19.0
-	google.golang.org/grpc v1.80.0
+	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
 )
 
