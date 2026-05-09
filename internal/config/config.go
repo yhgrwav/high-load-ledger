@@ -26,6 +26,8 @@ type Config struct {
 	LogLevel            string        `env:"LOG_LEVEL" envDefault:"info"`
 	AddSource           bool          `env:"ADD_SOURCE" envDefault:"true"`
 	IsJSON              bool          `env:"IS_JSON" envDefault:"true"`
+	ServiceName         string        `env:"SERVICE_NAME" envDefault:"ledger"`
+	MetricsPort         string        `env:"METRICS_PORT" envDefault:"6767"`
 }
 
 func NewConfig() (*Config, error) {
