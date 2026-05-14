@@ -10,21 +10,16 @@ import (
 )
 
 func UnaryMetricsInterceptor(m telemetry.Metrics) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 
 		resp, err := handler(ctx, req)
-		if err != nil {
-			return nil, err
-		}
 
-		result := float64(time.Since(start).Seconds())
-
+		duration := time.Since(start).Seconds()
 		st, _ := status.FromError(err)
-
 		code := st.Code().String()
 
-		m.ObserveResponseTime(info.FullMethod, code, result)
+		m.ObserveResponseTime(info.FullMethod, code, duration)
 		m.ObserveTotalRequests(info.FullMethod, code)
 
 		return resp, err
