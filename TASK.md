@@ -1,8 +1,8 @@
 ## Техническое Задание для High-Load Distributed Ledger Core
 
 ### Цель проекта
-- Достичь 1000-2000 RPS на один инстанс
-- Реализовать покрытие современными инструментами для production-ready сервиса
+- Разработать сервис с современным стеком технологий, выдерживающий высокий RPS
+- Получить практический опыт с полноценной чистой архитектурой и идиоматичными подходами на разных этапах разработки
 
 ### Технологический стек
 - Язык: Go 1.25+
@@ -10,7 +10,7 @@
 - Брокер сообщений: Apache Kafka
 - Кэширование и идемпотентность: Redis
 - Хранилище данных: PostgreSQL
-- observability: grafana, prometheus, slog, jaeger
+- observability: grafana, prometheus, slog
 - Инфраструктура: Docker, Docker Compose, Makefile
 
 ### План реализации
@@ -21,10 +21,9 @@
 - [x] Логирование с slog (structured logging)
 - [x] Healthcheck для Postgres в docker-compose
 - [ ] Интеграция с Kafka (async обработка транзакций)
-- [ ] Unit и интеграционные тесты
-- [ ] Метрики Prometheus (RPS, latency, Kafka lag)
-- [ ] Трейсы OpenTelemetry
+- [x] Метрики Prometheus
 - [ ] Шардирование PostgreSQL (по user_id)
 - [ ] Kubernetes манифесты для деплоя
 - [ ] Микросервис для генерации нагрузки (load testing)
 - [ ] Интеграция Nginx
+- [ ] Unit и интеграционные тесты
