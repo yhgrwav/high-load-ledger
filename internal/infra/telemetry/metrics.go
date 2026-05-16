@@ -1,6 +1,9 @@
 package telemetry
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
 
 type Metrics interface {
 	ObserveTotalRequests(method, code string)
@@ -26,17 +29,23 @@ var (
 	}, []string{"method", "code"})
 )
 
-type prometheusMetrics struct {
-	requestsTotal *prometheus.CounterVec
-	responseTime  *prometheus.HistogramVec
-	serviceName   string
+type PrometheusMetrics struct {
+	requestsTotal            *prometheus.CounterVec
+	responseTime             *prometheus.HistogramVec
+	TransactionResultCounter *prometheus.CounterVec
+	serviceName              string
 }
 
-func NewPrometheusMetrics(serviceName string) Metrics {
-	m := &prometheusMetrics{
+func NewPrometheusMetrics(serviceName string) *PrometheusMetrics {
+	m := &PrometheusMetrics{
 		requestsTotal: requestsCounter,
 		responseTime:  requestDuration,
 		serviceName:   serviceName,
+		TransactionResultCounter: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "ledger_transaction_execution_total",
+			Help: "Total number of processed transaction by status",
+		}, []string{"status"},
+		),
 	}
 
 	prometheus.MustRegister(m.requestsTotal, m.responseTime)
@@ -44,10 +53,10 @@ func NewPrometheusMetrics(serviceName string) Metrics {
 	return m
 }
 
-func (m prometheusMetrics) ObserveTotalRequests(method, code string) {
+func (m PrometheusMetrics) ObserveTotalRequests(method, code string) {
 	m.requestsTotal.WithLabelValues(m.serviceName, method, code).Inc()
 }
 
-func (m prometheusMetrics) ObserveResponseTime(method, status string, duration float64) {
+func (m PrometheusMetrics) ObserveResponseTime(method, status string, duration float64) {
 	m.responseTime.WithLabelValues(method, status).Observe(duration)
 }
