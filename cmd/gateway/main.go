@@ -3,26 +3,26 @@ package main
 import (
 	"context"
 	"fmt"
-	"high-load-ledger/internal/infra/telemetry"
-	"high-load-ledger/internal/transport/grpc/interceptors"
 	"log"
 	"net"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	ledger "high-load-ledger/gen/go"
 	"high-load-ledger/internal/config"
 	"high-load-ledger/internal/infra/logger"
+	"high-load-ledger/internal/infra/telemetry"
 	"high-load-ledger/internal/repository/postgres"
 	redisRepo "high-load-ledger/internal/repository/redis"
 	transport "high-load-ledger/internal/transport/grpc"
+	"high-load-ledger/internal/transport/grpc/interceptors"
 	"high-load-ledger/internal/usecase"
 )
 
@@ -48,14 +48,14 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	metrics := telemetry.NewPrometheusMetrics(cfg.ServiceName)
-
-	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(metrics)),
-	)
-
 	lgr := logger.New(cfg.LogLevel, cfg.AddSource, cfg.IsJSON)
 	lgr.Info("Ledger starting...", "user", cfg.DBUser, "host", cfg.DBHost)
+
+	tel := telemetry.New(cfg, *lgr)
+
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(*tel.Metrics)),
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -109,19 +109,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	metrix := fmt.Sprintf(":%s", cfg.MetricsPort)
+	errCh := make(chan error, 1)
+
+	tel.Start(errCh)
 
 	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		lgr.Info("Prometheus metrics server is running", "port", cfg.MetricsPort)
-		if err := http.ListenAndServe(metrix, nil); err != nil {
-			lgr.Error("failed to serve metrics", "error", err)
+		lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
+		if err := server.Serve(lis); err != nil {
+			errCh <- fmt.Errorf("gRPC server failed: %w", err)
 		}
 	}()
 
-	lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
-	if err := server.Serve(lis); err != nil {
-		lgr.Error("failed to serve", "error", err)
-		os.Exit(1)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		lgr.Error("Critical error occurred, shutting down", "error", err)
+	case sig := <-quit:
+		lgr.Info("Received shutdown signal", "signal", sig.String())
 	}
+
+	lgr.Info("Shutting down servers gracefully...")
+
+	server.GracefulStop()
+	lgr.Info("gRPC server stopped")
+
+	if err := tel.Stop(context.Background()); err != nil {
+		lgr.Error("failed to shutdown telemetry", "error", err)
+	}
+
+	lgr.Info("Ledger stopped completely")
 }
