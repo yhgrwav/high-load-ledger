@@ -3,8 +3,10 @@ package usecase
 import (
 	"bytes"
 	"context"
+	"errors"
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
+	"high-load-ledger/internal/infra/telemetry"
 	"log/slog"
 	"time"
 
@@ -21,18 +23,48 @@ type TransferUseCase struct {
 	cache             repository.CacheRepository
 	logger            *slog.Logger
 	idempotencyKeyTTL time.Duration
+	metrics           *telemetry.PrometheusMetrics
 }
 
-func NewTransferUseCase(repo txAccRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration) *TransferUseCase {
+func NewTransferUseCase(repo txAccRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics) *TransferUseCase {
 	return &TransferUseCase{
 		repo:              repo,
 		cache:             cache,
 		logger:            logger,
 		idempotencyKeyTTL: ttl,
+		metrics:           metrics,
 	}
 }
 
-func (t *TransferUseCase) Transaction(ctx context.Context, req entity.TransactionRequest) (uuid.UUID, error) {
+func (t *TransferUseCase) Transaction(ctx context.Context, req entity.TransactionRequest) (id uuid.UUID, err error) {
+	defer func() {
+		// обработка кейса пустого поля метрик для тестов которые я никогда не напишу
+		if t.metrics == nil {
+			return
+		}
+
+		// label, который будет передаваться в метрику, по дефолту success, если ошибка - ошибка в свитч-кейсе определяется по типу
+		status := "success"
+		switch {
+		case err == nil:
+			status = "success"
+		case errors.Is(err, entity.ErrInvalidAmount),
+			errors.Is(err, entity.ErrSameAccountTransfer),
+			errors.Is(err, entity.ErrEmptyIdempotencyKey),
+			errors.Is(err, entity.ErrInvalidCurrency):
+			status = "validation_error"
+		case errors.Is(err, entity.ErrCurrencyMismatch):
+			status = "currency_mismatch"
+		case errors.Is(err, entity.ErrInsufficientFunds):
+			status = "insufficient_funds"
+		default:
+			status = "system_error"
+		}
+
+		// результат кидается в счётчик по статусу
+		t.metrics.TransactionResultCounter.WithLabelValues(status).Inc()
+	}()
+
 	if err := t.validateRequest(req); err != nil {
 		return uuid.Nil, err
 	}
