@@ -18,7 +18,7 @@ type Config struct {
 	DBSSLMode           string        `env:"DB_SSL_MODE"`
 	DSN                 string        `env:"DSN"`
 	RedisHost           string        `env:"REDIS_HOST"`
-	RedisPort           string        `env:"REDIS_PORT"`
+	RedisPort           string        `env:"REDIS_PORT" envDefault:"6379"`
 	RedisPassword       string        `env:"REDIS_PASSWORD"`
 	RedisDB             int           `env:"REDIS_DB" envDefault:"0"`
 	RedisTransactionTTL time.Duration `env:"REDIS_TRANSACTION_TTL" envDefault:"67m"`
