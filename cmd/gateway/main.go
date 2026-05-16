@@ -94,7 +94,7 @@ func main() {
 
 	cacheRepo := redisRepo.NewCacheRepository(rdb, lgr)
 
-	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, cfg.RedisTransactionTTL)
+	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, cfg.RedisTransactionTTL, tel.Metrics)
 	accountUC := usecase.NewAccountUseCase(repo, lgr)
 
 	handler := transport.NewHandler(transferUC, accountUC, lgr)
