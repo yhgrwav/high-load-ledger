@@ -14,7 +14,7 @@ import (
 
 type Observability struct {
 	logger  *slog.Logger
-	Metrics *Metrics
+	Metrics *PrometheusMetrics
 	server  *http.Server
 }
 
@@ -24,7 +24,7 @@ func New(cfg *config.Config, logger slog.Logger) *Observability {
 
 	return &Observability{
 		logger:  &logger,
-		Metrics: new(NewPrometheusMetrics(cfg.ServiceName)),
+		Metrics: NewPrometheusMetrics(cfg.ServiceName),
 		server: &http.Server{
 			Addr:         ":" + cfg.MetricsPort,
 			Handler:      mux,
