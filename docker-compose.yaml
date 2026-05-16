@@ -91,19 +91,6 @@ services:
     networks:
       - ledger_network
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.57
-    container_name: ledger_jaeger
-    restart: unless-stopped
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
-    networks:
-      - ledger_network
-
   redis:
     image: redis:7-alpine
     container_name: ledger_redis
