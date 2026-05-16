@@ -1,144 +1,61 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "datasource",
-          "uid": "grafana"
-        },
-        "enable": true,
-        "hide": true,
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
   "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 1,
   "id": null,
-  "links": [],
-  "liveNow": false,
+  "title": "Go Runtime Monitoring",
+  "tags": ["infrastructure"],
+  "style": "dark",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
       "id": 1,
-      "title": "Active Goroutines",
+      "title": "Runtime: Active Goroutines",
       "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (instance) (go_goroutines{job=\"ledger-gateway\"})",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "refId": "A"
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "go_goroutines",
+          "legendFormat": "Goroutines"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth"
-          },
-          "unit": "short"
-        }
-      }
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
       "id": 2,
-      "title": "Heap Alloc (Bytes Allocated)",
+      "title": "Runtime: Heap Memory Allocation",
       "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (instance) (go_memstats_alloc_bytes{job=\"ledger-gateway\"})",
-          "legendFormat": "{{instance}}",
-          "range": true,
-          "refId": "A"
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "go_memstats_alloc_bytes",
+          "legendFormat": "Allocated Bytes"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line"
-          },
-          "unit": "bytes"
-        }
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "fieldConfig": { "defaults": { "unit": "bytes" } }
       }
     },
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 8
-      },
       "id": 3,
-      "title": "GC Duration Quantiles (p99)",
+      "title": "Runtime: GC Duration Quantiles (p99)",
       "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
       "targets": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (instance) (go_gc_duration_seconds{job=\"ledger-gateway\", quantile=\"0.99\"})",
-          "legendFormat": "{{instance}} p99",
-          "range": true,
-          "refId": "A"
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "go_gc_duration_seconds{quantile=\"0.99\"}",
+          "legendFormat": "p99 GC Pause"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line"
-          },
-          "unit": "s"
-        }
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "fieldConfig": { "defaults": { "unit": "s" } }
       }
     }
-  ],
-  "refresh": "5s",
-  "schemaVersion": 39,
-  "tags": ["go", "infrastructure"],
-  "timezone": "browser",
-  "title": "Go Runtime Monitoring",
-  "uid": "go_runtime_metrics",
-  "version": 1
+  ]
 }
