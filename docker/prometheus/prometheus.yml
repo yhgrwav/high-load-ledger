@@ -2,14 +2,14 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-
 scrape_configs:
   - job_name: 'prometheus'
-    scrape_interval: 15s
-
     static_configs:
       - targets: ['localhost:9090']
 
   - job_name: 'ledger-gateway'
-    static_configs:
-      - targets: ['gateway:6767']
+    dns_sd_configs:
+      - names:
+          - 'tasks.gateway'
+        type: 'A'
+        port: 6767
