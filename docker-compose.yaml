@@ -83,8 +83,9 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_SERVER_HTTP_PORT: 3000
     volumes:
-      - ./docker/grafana/provisioning/datasources/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
-      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
     ports:
       - "3000:3000"
     networks:
