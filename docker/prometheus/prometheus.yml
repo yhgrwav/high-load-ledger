@@ -8,6 +8,8 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   - job_name: 'ledger-gateway'
+    static_configs:
+      - targets: ['gateway:6767']
     dns_sd_configs:
       - names:
           - 'tasks.gateway'
