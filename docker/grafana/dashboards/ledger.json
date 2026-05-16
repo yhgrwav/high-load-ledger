@@ -1,0 +1,76 @@
+{
+  "editable": true,
+  "id": null,
+  "title": "Ledger Business Metrics",
+  "tags": ["business"],
+  "style": "dark",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "gRPC: Total Requests (Counter)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "sum(total_requests) by (method)",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    },
+    {
+      "id": 2,
+      "title": "gRPC: Request Duration (p99 Latency)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(request_duration_bucket[5m])) by (le, method))",
+          "legendFormat": "p99 {{method}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "fieldConfig": { "defaults": { "unit": "s" } }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Business: Transaction Execution Statuses",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "sum(TransactionResultCounter) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "showValue": "all",
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Technical: Current RPS Rate (1m window)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "sum(rate(total_requests[1m])) by (method, status)",
+          "legendFormat": "{{method}} ({{status}})"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    }
+  ]
+}
