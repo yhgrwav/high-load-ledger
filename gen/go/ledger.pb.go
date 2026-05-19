@@ -76,58 +76,6 @@ func (Currency) EnumDescriptor() ([]byte, []int) {
 	return file_ledger_proto_rawDescGZIP(), []int{0}
 }
 
-type TransactionStatus int32
-
-const (
-	TransactionStatus_STATUS_UNKNOWN   TransactionStatus = 0
-	TransactionStatus_STATUS_PENDING   TransactionStatus = 1
-	TransactionStatus_STATUS_COMPLETED TransactionStatus = 2
-	TransactionStatus_STATUS_FAILED    TransactionStatus = 3
-)
-
-// Enum value maps for TransactionStatus.
-var (
-	TransactionStatus_name = map[int32]string{
-		0: "STATUS_UNKNOWN",
-		1: "STATUS_PENDING",
-		2: "STATUS_COMPLETED",
-		3: "STATUS_FAILED",
-	}
-	TransactionStatus_value = map[string]int32{
-		"STATUS_UNKNOWN":   0,
-		"STATUS_PENDING":   1,
-		"STATUS_COMPLETED": 2,
-		"STATUS_FAILED":    3,
-	}
-)
-
-func (x TransactionStatus) Enum() *TransactionStatus {
-	p := new(TransactionStatus)
-	*p = x
-	return p
-}
-
-func (x TransactionStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (TransactionStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_ledger_proto_enumTypes[1].Descriptor()
-}
-
-func (TransactionStatus) Type() protoreflect.EnumType {
-	return &file_ledger_proto_enumTypes[1]
-}
-
-func (x TransactionStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use TransactionStatus.Descriptor instead.
-func (TransactionStatus) EnumDescriptor() ([]byte, []int) {
-	return file_ledger_proto_rawDescGZIP(), []int{1}
-}
-
 type TransferRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	IdempotencyKey []byte                 `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
@@ -207,7 +155,6 @@ func (x *TransferRequest) GetCurrency() Currency {
 type TransferResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TransactionId []byte                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	Status        TransactionStatus      `protobuf:"varint,2,opt,name=status,proto3,enum=api.ledger.TransactionStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -249,16 +196,8 @@ func (x *TransferResponse) GetTransactionId() []byte {
 	return nil
 }
 
-func (x *TransferResponse) GetStatus() TransactionStatus {
-	if x != nil {
-		return x.Status
-	}
-	return TransactionStatus_STATUS_UNKNOWN
-}
-
 type CreateAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Currency      Currency               `protobuf:"varint,2,opt,name=currency,proto3,enum=api.ledger.Currency" json:"currency,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -292,13 +231,6 @@ func (x *CreateAccountRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CreateAccountRequest.ProtoReflect.Descriptor instead.
 func (*CreateAccountRequest) Descriptor() ([]byte, []int) {
 	return file_ledger_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *CreateAccountRequest) GetUserId() []byte {
-	if x != nil {
-		return x.UserId
-	}
-	return nil
 }
 
 func (x *CreateAccountRequest) GetCurrency() Currency {
@@ -507,7 +439,6 @@ type GetTransactionResponse struct {
 	UserTo        []byte                 `protobuf:"bytes,3,opt,name=user_to,json=userTo,proto3" json:"user_to,omitempty"`
 	Amount        int64                  `protobuf:"varint,4,opt,name=amount,proto3" json:"amount,omitempty"`
 	Currency      Currency               `protobuf:"varint,5,opt,name=currency,proto3,enum=api.ledger.Currency" json:"currency,omitempty"`
-	Status        TransactionStatus      `protobuf:"varint,6,opt,name=status,proto3,enum=api.ledger.TransactionStatus" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -577,109 +508,6 @@ func (x *GetTransactionResponse) GetCurrency() Currency {
 	return Currency_CURRENCY_UNSPECIFIED
 }
 
-func (x *GetTransactionResponse) GetStatus() TransactionStatus {
-	if x != nil {
-		return x.Status
-	}
-	return TransactionStatus_STATUS_UNKNOWN
-}
-
-type UpdateStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TransactionId []byte                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
-	Status        TransactionStatus      `protobuf:"varint,2,opt,name=status,proto3,enum=api.ledger.TransactionStatus" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateStatusRequest) Reset() {
-	*x = UpdateStatusRequest{}
-	mi := &file_ledger_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateStatusRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateStatusRequest) ProtoMessage() {}
-
-func (x *UpdateStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ledger_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateStatusRequest.ProtoReflect.Descriptor instead.
-func (*UpdateStatusRequest) Descriptor() ([]byte, []int) {
-	return file_ledger_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *UpdateStatusRequest) GetTransactionId() []byte {
-	if x != nil {
-		return x.TransactionId
-	}
-	return nil
-}
-
-func (x *UpdateStatusRequest) GetStatus() TransactionStatus {
-	if x != nil {
-		return x.Status
-	}
-	return TransactionStatus_STATUS_UNKNOWN
-}
-
-type UpdateStatusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateStatusResponse) Reset() {
-	*x = UpdateStatusResponse{}
-	mi := &file_ledger_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateStatusResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateStatusResponse) ProtoMessage() {}
-
-func (x *UpdateStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ledger_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateStatusResponse.ProtoReflect.Descriptor instead.
-func (*UpdateStatusResponse) Descriptor() ([]byte, []int) {
-	return file_ledger_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *UpdateStatusResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
 var File_ledger_proto protoreflect.FileDescriptor
 
 const file_ledger_proto_rawDesc = "" +
@@ -693,13 +521,11 @@ const file_ledger_proto_rawDesc = "" +
 	"\n" +
 	"user_to_id\x18\x03 \x01(\fR\buserToId\x12\x16\n" +
 	"\x06amount\x18\x04 \x01(\x03R\x06amount\x120\n" +
-	"\bcurrency\x18\x05 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency\"p\n" +
+	"\bcurrency\x18\x05 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency\"9\n" +
 	"\x10TransferResponse\x12%\n" +
-	"\x0etransaction_id\x18\x01 \x01(\fR\rtransactionId\x125\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1d.api.ledger.TransactionStatusR\x06status\"a\n" +
-	"\x14CreateAccountRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\fR\x06userId\x120\n" +
-	"\bcurrency\x18\x02 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency\"6\n" +
+	"\x0etransaction_id\x18\x01 \x01(\fR\rtransactionId\"W\n" +
+	"\x14CreateAccountRequest\x120\n" +
+	"\bcurrency\x18\x02 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrencyJ\x04\b\x01\x10\x02R\auser_id\"6\n" +
 	"\x15CreateAccountResponse\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\fR\taccountId\"U\n" +
@@ -711,39 +537,27 @@ const file_ledger_proto_rawDesc = "" +
 	"\abalance\x18\x01 \x01(\x03R\abalance\x120\n" +
 	"\bcurrency\x18\x02 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency\">\n" +
 	"\x15GetTransactionRequest\x12%\n" +
-	"\x0etransaction_id\x18\x01 \x01(\fR\rtransactionId\"\xdf\x01\n" +
+	"\x0etransaction_id\x18\x01 \x01(\fR\rtransactionId\"\xa8\x01\n" +
 	"\x16GetTransactionResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1b\n" +
 	"\tuser_from\x18\x02 \x01(\fR\buserFrom\x12\x17\n" +
 	"\auser_to\x18\x03 \x01(\fR\x06userTo\x12\x16\n" +
 	"\x06amount\x18\x04 \x01(\x03R\x06amount\x120\n" +
-	"\bcurrency\x18\x05 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency\x125\n" +
-	"\x06status\x18\x06 \x01(\x0e2\x1d.api.ledger.TransactionStatusR\x06status\"s\n" +
-	"\x13UpdateStatusRequest\x12%\n" +
-	"\x0etransaction_id\x18\x01 \x01(\fR\rtransactionId\x125\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1d.api.ledger.TransactionStatusR\x06status\"0\n" +
-	"\x14UpdateStatusResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess*l\n" +
+	"\bcurrency\x18\x05 \x01(\x0e2\x14.api.ledger.CurrencyR\bcurrency*l\n" +
 	"\bCurrency\x12\x18\n" +
 	"\x14CURRENCY_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fCURRENCY_USD\x10\x01\x12\x10\n" +
 	"\fCURRENCY_EUR\x10\x02\x12\x10\n" +
 	"\fCURRENCY_RUB\x10\x03\x12\x10\n" +
-	"\fCURRENCY_BYN\x10\x04*d\n" +
-	"\x11TransactionStatus\x12\x12\n" +
-	"\x0eSTATUS_UNKNOWN\x10\x00\x12\x12\n" +
-	"\x0eSTATUS_PENDING\x10\x01\x12\x14\n" +
-	"\x10STATUS_COMPLETED\x10\x02\x12\x11\n" +
-	"\rSTATUS_FAILED\x10\x032\xb3\x01\n" +
+	"\fCURRENCY_BYN\x10\x042\xb3\x01\n" +
 	"\x0eAccountService\x12T\n" +
 	"\rCreateAccount\x12 .api.ledger.CreateAccountRequest\x1a!.api.ledger.CreateAccountResponse\x12K\n" +
 	"\n" +
 	"GetBalance\x12\x1d.api.ledger.GetBalanceRequest\x1a\x1e.api.ledger.GetBalanceResponse2[\n" +
 	"\x12TransactionService\x12E\n" +
-	"\bTransfer\x12\x1b.api.ledger.TransferRequest\x1a\x1c.api.ledger.TransferResponse2\xc5\x01\n" +
+	"\bTransfer\x12\x1b.api.ledger.TransferRequest\x1a\x1c.api.ledger.TransferResponse2g\n" +
 	"\fStatsService\x12W\n" +
-	"\x0eGetTransaction\x12!.api.ledger.GetTransactionRequest\x1a\".api.ledger.GetTransactionResponse\x12\\\n" +
-	"\x17UpdateTransactionStatus\x12\x1f.api.ledger.UpdateStatusRequest\x1a .api.ledger.UpdateStatusResponseB:Z8github.com/yhgrwav/high-load-ledger/gen/go/ledger;ledgerb\x06proto3"
+	"\x0eGetTransaction\x12!.api.ledger.GetTransactionRequest\x1a\".api.ledger.GetTransactionResponseB:Z8github.com/yhgrwav/high-load-ledger/gen/go/ledger;ledgerb\x06proto3"
 
 var (
 	file_ledger_proto_rawDescOnce sync.Once
@@ -757,45 +571,37 @@ func file_ledger_proto_rawDescGZIP() []byte {
 	return file_ledger_proto_rawDescData
 }
 
-var file_ledger_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_ledger_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_ledger_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_ledger_proto_goTypes = []any{
 	(Currency)(0),                  // 0: api.ledger.Currency
-	(TransactionStatus)(0),         // 1: api.ledger.TransactionStatus
-	(*TransferRequest)(nil),        // 2: api.ledger.TransferRequest
-	(*TransferResponse)(nil),       // 3: api.ledger.TransferResponse
-	(*CreateAccountRequest)(nil),   // 4: api.ledger.CreateAccountRequest
-	(*CreateAccountResponse)(nil),  // 5: api.ledger.CreateAccountResponse
-	(*GetBalanceRequest)(nil),      // 6: api.ledger.GetBalanceRequest
-	(*GetBalanceResponse)(nil),     // 7: api.ledger.GetBalanceResponse
-	(*GetTransactionRequest)(nil),  // 8: api.ledger.GetTransactionRequest
-	(*GetTransactionResponse)(nil), // 9: api.ledger.GetTransactionResponse
-	(*UpdateStatusRequest)(nil),    // 10: api.ledger.UpdateStatusRequest
-	(*UpdateStatusResponse)(nil),   // 11: api.ledger.UpdateStatusResponse
+	(*TransferRequest)(nil),        // 1: api.ledger.TransferRequest
+	(*TransferResponse)(nil),       // 2: api.ledger.TransferResponse
+	(*CreateAccountRequest)(nil),   // 3: api.ledger.CreateAccountRequest
+	(*CreateAccountResponse)(nil),  // 4: api.ledger.CreateAccountResponse
+	(*GetBalanceRequest)(nil),      // 5: api.ledger.GetBalanceRequest
+	(*GetBalanceResponse)(nil),     // 6: api.ledger.GetBalanceResponse
+	(*GetTransactionRequest)(nil),  // 7: api.ledger.GetTransactionRequest
+	(*GetTransactionResponse)(nil), // 8: api.ledger.GetTransactionResponse
 }
 var file_ledger_proto_depIdxs = []int32{
-	0,  // 0: api.ledger.TransferRequest.currency:type_name -> api.ledger.Currency
-	1,  // 1: api.ledger.TransferResponse.status:type_name -> api.ledger.TransactionStatus
-	0,  // 2: api.ledger.CreateAccountRequest.currency:type_name -> api.ledger.Currency
-	0,  // 3: api.ledger.GetBalanceResponse.currency:type_name -> api.ledger.Currency
-	0,  // 4: api.ledger.GetTransactionResponse.currency:type_name -> api.ledger.Currency
-	1,  // 5: api.ledger.GetTransactionResponse.status:type_name -> api.ledger.TransactionStatus
-	1,  // 6: api.ledger.UpdateStatusRequest.status:type_name -> api.ledger.TransactionStatus
-	4,  // 7: api.ledger.AccountService.CreateAccount:input_type -> api.ledger.CreateAccountRequest
-	6,  // 8: api.ledger.AccountService.GetBalance:input_type -> api.ledger.GetBalanceRequest
-	2,  // 9: api.ledger.TransactionService.Transfer:input_type -> api.ledger.TransferRequest
-	8,  // 10: api.ledger.StatsService.GetTransaction:input_type -> api.ledger.GetTransactionRequest
-	10, // 11: api.ledger.StatsService.UpdateTransactionStatus:input_type -> api.ledger.UpdateStatusRequest
-	5,  // 12: api.ledger.AccountService.CreateAccount:output_type -> api.ledger.CreateAccountResponse
-	7,  // 13: api.ledger.AccountService.GetBalance:output_type -> api.ledger.GetBalanceResponse
-	3,  // 14: api.ledger.TransactionService.Transfer:output_type -> api.ledger.TransferResponse
-	9,  // 15: api.ledger.StatsService.GetTransaction:output_type -> api.ledger.GetTransactionResponse
-	11, // 16: api.ledger.StatsService.UpdateTransactionStatus:output_type -> api.ledger.UpdateStatusResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	0, // 0: api.ledger.TransferRequest.currency:type_name -> api.ledger.Currency
+	0, // 1: api.ledger.CreateAccountRequest.currency:type_name -> api.ledger.Currency
+	0, // 2: api.ledger.GetBalanceResponse.currency:type_name -> api.ledger.Currency
+	0, // 3: api.ledger.GetTransactionResponse.currency:type_name -> api.ledger.Currency
+	3, // 4: api.ledger.AccountService.CreateAccount:input_type -> api.ledger.CreateAccountRequest
+	5, // 5: api.ledger.AccountService.GetBalance:input_type -> api.ledger.GetBalanceRequest
+	1, // 6: api.ledger.TransactionService.Transfer:input_type -> api.ledger.TransferRequest
+	7, // 7: api.ledger.StatsService.GetTransaction:input_type -> api.ledger.GetTransactionRequest
+	4, // 8: api.ledger.AccountService.CreateAccount:output_type -> api.ledger.CreateAccountResponse
+	6, // 9: api.ledger.AccountService.GetBalance:output_type -> api.ledger.GetBalanceResponse
+	2, // 10: api.ledger.TransactionService.Transfer:output_type -> api.ledger.TransferResponse
+	8, // 11: api.ledger.StatsService.GetTransaction:output_type -> api.ledger.GetTransactionResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_ledger_proto_init() }
@@ -808,8 +614,8 @@ func file_ledger_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ledger_proto_rawDesc), len(file_ledger_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   10,
+			NumEnums:      1,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

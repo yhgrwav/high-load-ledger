@@ -261,8 +261,7 @@ var TransactionService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	StatsService_GetTransaction_FullMethodName          = "/api.ledger.StatsService/GetTransaction"
-	StatsService_UpdateTransactionStatus_FullMethodName = "/api.ledger.StatsService/UpdateTransactionStatus"
+	StatsService_GetTransaction_FullMethodName = "/api.ledger.StatsService/GetTransaction"
 )
 
 // StatsServiceClient is the client API for StatsService service.
@@ -270,7 +269,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StatsServiceClient interface {
 	GetTransaction(ctx context.Context, in *GetTransactionRequest, opts ...grpc.CallOption) (*GetTransactionResponse, error)
-	UpdateTransactionStatus(ctx context.Context, in *UpdateStatusRequest, opts ...grpc.CallOption) (*UpdateStatusResponse, error)
 }
 
 type statsServiceClient struct {
@@ -291,22 +289,11 @@ func (c *statsServiceClient) GetTransaction(ctx context.Context, in *GetTransact
 	return out, nil
 }
 
-func (c *statsServiceClient) UpdateTransactionStatus(ctx context.Context, in *UpdateStatusRequest, opts ...grpc.CallOption) (*UpdateStatusResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UpdateStatusResponse)
-	err := c.cc.Invoke(ctx, StatsService_UpdateTransactionStatus_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // StatsServiceServer is the server API for StatsService service.
 // All implementations must embed UnimplementedStatsServiceServer
 // for forward compatibility.
 type StatsServiceServer interface {
 	GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error)
-	UpdateTransactionStatus(context.Context, *UpdateStatusRequest) (*UpdateStatusResponse, error)
 	mustEmbedUnimplementedStatsServiceServer()
 }
 
@@ -319,9 +306,6 @@ type UnimplementedStatsServiceServer struct{}
 
 func (UnimplementedStatsServiceServer) GetTransaction(context.Context, *GetTransactionRequest) (*GetTransactionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTransaction not implemented")
-}
-func (UnimplementedStatsServiceServer) UpdateTransactionStatus(context.Context, *UpdateStatusRequest) (*UpdateStatusResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateTransactionStatus not implemented")
 }
 func (UnimplementedStatsServiceServer) mustEmbedUnimplementedStatsServiceServer() {}
 func (UnimplementedStatsServiceServer) testEmbeddedByValue()                      {}
@@ -362,24 +346,6 @@ func _StatsService_GetTransaction_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _StatsService_UpdateTransactionStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(StatsServiceServer).UpdateTransactionStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: StatsService_UpdateTransactionStatus_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StatsServiceServer).UpdateTransactionStatus(ctx, req.(*UpdateStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // StatsService_ServiceDesc is the grpc.ServiceDesc for StatsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -390,10 +356,6 @@ var StatsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTransaction",
 			Handler:    _StatsService_GetTransaction_Handler,
-		},
-		{
-			MethodName: "UpdateTransactionStatus",
-			Handler:    _StatsService_UpdateTransactionStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
