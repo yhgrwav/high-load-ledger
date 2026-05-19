@@ -15,7 +15,6 @@ service TransactionService {
 
 service StatsService {
   rpc GetTransaction(GetTransactionRequest) returns (GetTransactionResponse);
-  rpc UpdateTransactionStatus(UpdateStatusRequest) returns (UpdateStatusResponse);
 }
 
 message TransferRequest {
@@ -28,15 +27,9 @@ message TransferRequest {
 
 message TransferResponse {
   bytes transaction_id = 1;
-  TransactionStatus status = 2;
 }
 
 message CreateAccountRequest {
-  // т.к. сервис рассчитан на работу со счетами, а не с связкой пользователь-счёт, то смысла в user_id нет, я не буду усложнять
-  // проект тем, что буду интегрировать авторизацию+аутентификацию, так что расчёт будет на то, чтобы юзер добросовестно
-  // просил создать аккаунт с определённой валютой и получал айдишник на выходе. из минусов - можно заспамить апишку
-  // и думаю я даже явно протестирую такой кейс в рамках стресс теста сервиса, но вообще в нормальной системе такого конечно
-  // не должно быть
   reserved 1;
   reserved "user_id";
 
@@ -67,16 +60,6 @@ message GetTransactionResponse {
   bytes user_to = 3;
   int64 amount = 4;
   Currency currency = 5;
-  TransactionStatus status = 6;
-}
-
-message UpdateStatusRequest {
-  bytes transaction_id = 1;
-  TransactionStatus status = 2;
-}
-
-message UpdateStatusResponse {
-  bool success = 1;
 }
 
 enum Currency {
@@ -85,11 +68,4 @@ enum Currency {
   CURRENCY_EUR = 2;
   CURRENCY_RUB = 3;
   CURRENCY_BYN = 4;
-}
-
-enum TransactionStatus {
-  STATUS_UNKNOWN = 0;
-  STATUS_PENDING = 1;
-  STATUS_COMPLETED = 2;
-  STATUS_FAILED = 3;
 }
