@@ -10,10 +10,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (db *Repository) CreateAccount(ctx context.Context, acc *entity.Account) error {
+func (db *Repository) CreateAccount(ctx context.Context, tx entity.CustomTx, acc *entity.Account) error {
 	query := `INSERT INTO ledger.accounts(user_id, amount, currency) VALUES($1, $2, $3)`
 
-	_, err := db.pool.Exec(ctx, query, acc.ID, acc.Balance, acc.Currency)
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	_, err = t.Exec(ctx, query, acc.ID, acc.Balance, acc.Currency)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to create account", "err", err, "user_id", acc.ID)
 		return fmt.Errorf("db: failed to create account: %w", err)
