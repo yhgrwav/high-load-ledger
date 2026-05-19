@@ -61,6 +61,5 @@ func (h *Handler) Transfer(ctx context.Context, req *ledger.TransferRequest) (*l
 
 	return &ledger.TransferResponse{
 		TransactionId: txID[:],
-		Status:        ledger.TransactionStatus_STATUS_COMPLETED,
 	}, nil
 }
