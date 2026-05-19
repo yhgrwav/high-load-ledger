@@ -13,20 +13,21 @@ import (
 	"github.com/google/uuid"
 )
 
-type txAccRepo interface {
+type transferRepo interface {
 	repository.TransactionRepository
 	repository.AccountRepository
+	repository.PostingRepository
 }
 
 type TransferUseCase struct {
-	repo              txAccRepo
+	repo              transferRepo
 	cache             repository.CacheRepository
 	logger            *slog.Logger
 	idempotencyKeyTTL time.Duration
 	metrics           *telemetry.PrometheusMetrics
 }
 
-func NewTransferUseCase(repo txAccRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics) *TransferUseCase {
+func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics) *TransferUseCase {
 	return &TransferUseCase{
 		repo:              repo,
 		cache:             cache,
@@ -38,12 +39,10 @@ func NewTransferUseCase(repo txAccRepo, cache repository.CacheRepository, logger
 
 func (t *TransferUseCase) Transaction(ctx context.Context, req entity.TransactionRequest) (id uuid.UUID, err error) {
 	defer func() {
-		// обработка кейса пустого поля метрик для тестов которые я никогда не напишу
 		if t.metrics == nil {
 			return
 		}
 
-		// label, который будет передаваться в метрику, по дефолту success, если ошибка - ошибка в свитч-кейсе определяется по типу
 		status := "success"
 		switch {
 		case err == nil:
@@ -61,7 +60,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 			status = "system_error"
 		}
 
-		// результат кидается в счётчик по статусу
 		t.metrics.TransactionResultCounter.WithLabelValues(status).Inc()
 	}()
 
@@ -73,21 +71,22 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	if err == nil {
 		return txID, nil
 	}
+	if !errors.Is(err, entity.ErrTransactionNotFound) {
+		return uuid.Nil, err
+	}
 
-	tr, err := t.repo.BeginTx(ctx)
+	tx, err := t.repo.BeginTx(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
 	defer func() {
 		if err != nil {
-			if err := t.repo.RollbackTx(ctx, tr); err != nil {
-				t.logger.ErrorContext(ctx, "failed to rollback transaction", "err", err)
-			}
+			_ = t.repo.RollbackTx(ctx, tx)
 		}
 	}()
 
-	fromAcc, toAcc, err := t.loadTransferAccounts(ctx, tr, req.FromAccountID, req.ToAccountID)
+	fromAcc, toAcc, err := t.loadTransferAccounts(ctx, tx, req.FromAccountID, req.ToAccountID)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -99,62 +98,66 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, entity.ErrInsufficientFunds
 	}
 
-	if err = t.repo.UpdateBalance(ctx, tr, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
+	if err = t.repo.UpdateBalance(ctx, tx, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
 		return uuid.Nil, err
 	}
-	if err = t.repo.UpdateBalance(ctx, tr, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
+	if err = t.repo.UpdateBalance(ctx, tx, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
 		return uuid.Nil, err
 	}
 
-	newTx := entity.Transaction{
+	trx := entity.Transaction{
 		ID:             uuid.New(),
 		IdempotencyKey: req.IdempotencyKey,
 		FromAccountID:  req.FromAccountID,
 		ToAccountID:    req.ToAccountID,
 		Amount:         req.Amount,
 		Currency:       req.Currency,
-		Status:         entity.STATUS_COMPLETED,
 		CreatedAt:      time.Now(),
 	}
 
-	if err = t.repo.CreateTransaction(ctx, tr, &newTx); err != nil {
+	if err = t.repo.CreateTransaction(ctx, tx, &trx); err != nil {
 		existing, err := t.repo.CheckIdempotencyKey(ctx, req.IdempotencyKey)
 		if err == nil {
+			_ = t.repo.RollbackTx(ctx, tx)
 			_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
 			return existing.ID, nil
 		}
 		return uuid.Nil, err
 	}
 
-	err = t.repo.CommitTx(ctx, tr)
-	if err != nil {
+	postings := []entity.Posting{
+		{TransactionID: trx.ID, AccountID: req.FromAccountID, Amount: -req.Amount},
+		{TransactionID: trx.ID, AccountID: req.ToAccountID, Amount: req.Amount},
+	}
+	if err = t.repo.CreatePostings(ctx, tx, postings); err != nil {
 		return uuid.Nil, err
 	}
 
-	_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, newTx.ID[:], t.idempotencyKeyTTL)
+	if err = t.repo.CommitTx(ctx, tx); err != nil {
+		return uuid.Nil, err
+	}
 
-	return newTx.ID, nil
+	_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, trx.ID[:], t.idempotencyKeyTTL)
+
+	return trx.ID, nil
 }
 
 func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
 	val, err := t.cache.GetIdempotencyKey(ctx, key)
 	if err == nil && len(val) == 16 {
-		if id, uerr := uuid.FromBytes(val); uerr == nil {
+		if id, err := uuid.FromBytes(val); err == nil {
 			return id, nil
 		}
 	}
 
-	tr, err := t.repo.CheckIdempotencyKey(ctx, key)
+	trx, err := t.repo.CheckIdempotencyKey(ctx, key)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	err = t.cache.SetIdempotencyKey(ctx, key, tr.ID[:], t.idempotencyKeyTTL)
-	if err != nil {
-		t.logger.WarnContext(ctx, "failed to update cache", "err", err)
-	}
+	_ = t.cache.SetIdempotencyKey(ctx, key, trx.ID[:], t.idempotencyKeyTTL)
 
-	return tr.ID, nil
+	return trx.ID, nil
 }
 
 func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
@@ -173,17 +176,17 @@ func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
 	return nil
 }
 
-func (t *TransferUseCase) loadTransferAccounts(ctx context.Context, tr entity.CustomTx, fromID, toID uuid.UUID) (*entity.Account, *entity.Account, error) {
+func (t *TransferUseCase) loadTransferAccounts(ctx context.Context, tx entity.CustomTx, fromID, toID uuid.UUID) (*entity.Account, *entity.Account, error) {
 	lockFirstID, lockSecondID := fromID, toID
 	if bytes.Compare(lockFirstID[:], lockSecondID[:]) > 0 {
 		lockFirstID, lockSecondID = lockSecondID, lockFirstID
 	}
 
-	lockFirstAcc, err := t.repo.GetForUpdate(ctx, tr, lockFirstID)
+	lockFirstAcc, err := t.repo.GetForUpdate(ctx, tx, lockFirstID)
 	if err != nil {
 		return nil, nil, err
 	}
-	lockSecondAcc, err := t.repo.GetForUpdate(ctx, tr, lockSecondID)
+	lockSecondAcc, err := t.repo.GetForUpdate(ctx, tx, lockSecondID)
 	if err != nil {
 		return nil, nil, err
 	}
