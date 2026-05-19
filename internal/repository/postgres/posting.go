@@ -15,13 +15,13 @@ func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, po
 		return err
 	}
 
-	query := `INSERT INTO ledger.postings (id, transaction_id, account_id, amount)
-			  VALUES($1, $2, $3, $4)`
+	query := `INSERT INTO ledger.postings (transaction_id, account_id, amount)
+			  VALUES($1, $2, $3)`
 
 	batch := &pgx.Batch{}
 
 	for _, posting := range postings {
-		batch.Queue(query, posting.ID, posting.TransactionID, posting.AccountID, posting.Amount)
+		batch.Queue(query, posting.TransactionID, posting.AccountID, posting.Amount)
 	}
 
 	result := t.SendBatch(ctx, batch)
@@ -37,7 +37,7 @@ func (db *Repository) ListPostingsByAccountID(ctx context.Context, accountID uui
 	query := `SELECT id, transaction_id, account_id, amount
               FROM ledger.postings
               WHERE account_id = $1
-              ORDER BY created_at DESC
+              ORDER BY id DESC
               LIMIT $2 OFFSET $3`
 
 	rows, err := db.pool.Query(ctx, query, accountID, limit, offset)
