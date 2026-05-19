@@ -11,42 +11,92 @@ import (
 	"github.com/google/uuid"
 )
 
+type accountRepo interface {
+	repository.AccountRepository
+	repository.TransactionRepository
+	repository.PostingRepository
+}
+
 type AccountUseCase struct {
-	repo   repository.AccountRepository
+	repo   accountRepo
 	logger *slog.Logger
 }
 
-func NewAccountUseCase(repo repository.AccountRepository, logger *slog.Logger) *AccountUseCase {
+func NewAccountUseCase(repo accountRepo, logger *slog.Logger) *AccountUseCase {
 	return &AccountUseCase{
 		repo:   repo,
 		logger: logger,
 	}
 }
 
-func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Currency) (uuid.UUID, error) {
+func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Currency) (id uuid.UUID, err error) {
 	if currency == entity.CURRENCY_UNSPECIFIED {
 		return uuid.Nil, entity.ErrInvalidCurrency
 	}
 
-	id, err := uuid.NewV7()
+	id, err = uuid.NewV7()
 	if err != nil {
-		a.logger.ErrorContext(ctx, "service: error generating uuid for account: ", err)
+		a.logger.ErrorContext(ctx, "service: error generating uuid for account", "err", err)
 		return uuid.Nil, err
 	}
 
-	balance := rand.Int()
+	balance := int64(rand.Int())
 
 	account := &entity.Account{
 		ID:        id,
-		Balance:   int64(balance),
+		Balance:   balance,
 		Currency:  currency,
 		UpdatedAt: time.Now().UTC(),
 	}
 
-	err = a.repo.CreateAccount(ctx, account)
+	tx, err := a.repo.BeginTx(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
+
+	defer func() {
+		if err != nil {
+			_ = a.repo.RollbackTx(ctx, tx)
+		}
+	}()
+
+	if err = a.repo.CreateAccount(ctx, tx, account); err != nil {
+		return uuid.Nil, err
+	}
+
+	if balance > 0 {
+		var openingKey uuid.UUID
+		openingKey, err = uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, err
+		}
+
+		trx := entity.Transaction{
+			ID:             uuid.New(),
+			IdempotencyKey: openingKey,
+			FromAccountID:  id,
+			ToAccountID:    id,
+			Amount:         balance,
+			Currency:       currency,
+			CreatedAt:      time.Now().UTC(),
+		}
+
+		if err = a.repo.CreateTransaction(ctx, tx, &trx); err != nil {
+			return uuid.Nil, err
+		}
+
+		postings := []entity.Posting{
+			{TransactionID: trx.ID, AccountID: id, Amount: balance},
+		}
+		if err = a.repo.CreatePostings(ctx, tx, postings); err != nil {
+			return uuid.Nil, err
+		}
+	}
+
+	if err = a.repo.CommitTx(ctx, tx); err != nil {
+		return uuid.Nil, err
+	}
+
 	return id, nil
 }
 
