@@ -20,14 +20,3 @@ func (h *Handler) GetTransaction(ctx context.Context, req *ledger.GetTransaction
 	h.logger.InfoContext(ctx, "GetTransaction stub called", "tx_id", txID)
 	return nil, status.Error(codes.Unimplemented, "not implemented yet")
 }
-
-func (h *Handler) UpdateTransactionStatus(ctx context.Context, req *ledger.UpdateStatusRequest) (*ledger.UpdateStatusResponse, error) {
-	txID, err := uuid.FromBytes(req.TransactionId)
-	if err != nil {
-		h.logger.ErrorContext(ctx, "invalid transaction_id", "error", err)
-		return nil, status.Error(codes.InvalidArgument, "invalid transaction_id")
-	}
-
-	h.logger.InfoContext(ctx, "UpdateTransactionStatus stub called", "tx_id", txID, "status", req.Status)
-	return &ledger.UpdateStatusResponse{Success: false}, status.Error(codes.Unimplemented, "not implemented yet")
-}
