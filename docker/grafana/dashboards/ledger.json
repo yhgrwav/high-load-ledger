@@ -17,7 +17,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(total_requests) by (method)",
+          "expr": "sum(ledger_grpc_total_requests) by (method)",
           "legendFormat": "{{method}}"
         }
       ],
@@ -31,7 +31,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(request_duration_bucket[5m])) by (le, method))",
+          "expr": "histogram_quantile(0.99, sum(rate(ledger_grpc_request_duration_bucket[5m])) by (le, method))",
           "legendFormat": "p99 {{method}}"
         }
       ],
@@ -48,7 +48,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(TransactionResultCounter) by (status)",
+          "expr": "sum(ledger_transaction_execution_total) by (status)",
           "legendFormat": "{{status}}"
         }
       ],
@@ -62,12 +62,31 @@
       "id": 4,
       "title": "Technical: Current RPS Rate (1m window)",
       "type": "timeseries",
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 8 },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(rate(total_requests[1m])) by (method, status)",
-          "legendFormat": "{{method}} ({{status}})"
+          "expr": "sum(rate(ledger_grpc_total_requests[1m])) by (method, code)",
+          "legendFormat": "{{method}} ({{code}})"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    },
+    {
+      "id": 5,
+      "title": "Posting Worker: Balance Corrections",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "posting_worker_balances_corrected_total",
+          "legendFormat": "corrections total"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "rate(posting_worker_balances_corrected_total[5m])",
+          "legendFormat": "corrections/sec (5m)"
         }
       ],
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
