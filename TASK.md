@@ -22,6 +22,7 @@
 - [x] Healthcheck для Postgres в docker-compose
 - [ ] Интеграция с Kafka (async обработка транзакций)
 - [x] Метрики Prometheus
+- [x] PostingWorker (фоновая верификация балансов)
 - [ ] Шардирование PostgreSQL (по user_id)
 - [ ] Kubernetes манифесты для деплоя
 - [ ] Микросервис для генерации нагрузки (load testing)
