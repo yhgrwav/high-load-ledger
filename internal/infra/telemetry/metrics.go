@@ -33,6 +33,7 @@ type PrometheusMetrics struct {
 	requestsTotal            *prometheus.CounterVec
 	responseTime             *prometheus.HistogramVec
 	TransactionResultCounter *prometheus.CounterVec
+	PostingBalancesCorrected prometheus.Counter
 	serviceName              string
 }
 
@@ -46,6 +47,11 @@ func NewPrometheusMetrics(serviceName string) *PrometheusMetrics {
 			Help: "Total number of processed transaction by status",
 		}, []string{"status"},
 		),
+		PostingBalancesCorrected: promauto.NewCounter(prometheus.CounterOpts{
+			Namespace: "posting_worker",
+			Name:      "balances_corrected_total",
+			Help:      "Number of account balances corrected by posting worker",
+		}),
 	}
 
 	prometheus.MustRegister(m.requestsTotal, m.responseTime)
