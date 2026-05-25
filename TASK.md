@@ -28,3 +28,4 @@
 - [ ] Микросервис для генерации нагрузки (load testing)
 - [ ] Интеграция Nginx
 - [ ] Unit и интеграционные тесты
+- [x] Unit-тесты usecase (Transfer, Account, PostingWorker, Stats)
