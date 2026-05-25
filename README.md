@@ -27,7 +27,14 @@ docker compose up -d --build
 ### ![img_1.png](img_1.png) gRPC ручки (update status - mock)
 
 ### localhost:3000 (admin, admin) - grafana
-### localhost:6767/metrics - prometheus 
+### localhost:6767/metrics - prometheus
+
+### Posting Worker
+Фоновый воркер верифицирует балансы аккаунтов батчами по `postings.id`. Настраивается через `.env`:
+- `POSTING_WORKER_ENABLED` — включить/выключить
+- `POSTING_WORKER_NAME` — имя воркера (ключ курсора в БД, обязательно при enabled=true)
+- `POSTING_WORKER_BATCH_SIZE` — размер батча postings
+- `POSTING_WORKER_BACKOFF` — пауза при отсутствии новых postings
 
 
 ## Примеры gRPC-запросов
@@ -71,10 +78,11 @@ docker compose up -d --build
 - [x] Protobuf контракты и миграции
 - [x] Чистая архитектура
 - [x] AccountService и TransactionService
+- [x] PostingWorker (фоновая верификация балансов)
+- [x] Prometheus метрики и Grafana дашборды
 - [ ] StatsService (получение транзакций, обновление статуса)
 - [ ] Unit и интеграционные тесты
 - [ ] Интеграция с Apache Kafka для асинхронной обработки
-- [ ] Prometheus метрики
 - [ ] OpenTelemetry трассировка
 - [ ] Шардирование PostgreSQL
 - [ ] Kubernetes манифесты
