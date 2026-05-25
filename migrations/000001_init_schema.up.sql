@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS ledger.accounts (
     user_id UUID PRIMARY KEY,
     amount BIGINT NOT NULL DEFAULT 0 CHECK(amount >= 0),
     currency SMALLINT NOT NULL,
+    latest_posting_id BIGINT NOT NULL DEFAULT 0,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
     );
 
@@ -30,4 +31,10 @@ CREATE TABLE IF NOT EXISTS ledger.postings (
     );
 
 CREATE INDEX IF NOT EXISTS idx_postings_account_id ON ledger.postings(account_id);
+CREATE INDEX IF NOT EXISTS idx_postings_account_id_id ON ledger.postings(account_id, id);
 CREATE INDEX IF NOT EXISTS idx_transactions_from_to ON ledger.transactions(user_from, user_to);
+
+CREATE TABLE IF NOT EXISTS ledger.worker_cursors (
+    worker_name TEXT PRIMARY KEY,
+    position BIGINT NOT NULL DEFAULT 0 CHECK(position >= 0)
+    );
