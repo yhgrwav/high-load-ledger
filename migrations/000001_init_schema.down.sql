@@ -1,4 +1,7 @@
+DROP TABLE IF EXISTS ledger.worker_cursors;
+
 DROP INDEX IF EXISTS ledger.idx_transactions_from_to;
+DROP INDEX IF EXISTS ledger.idx_postings_account_id_id;
 DROP INDEX IF EXISTS ledger.idx_postings_account_id;
 
 DROP TABLE IF EXISTS ledger.postings;
