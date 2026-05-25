@@ -32,7 +32,7 @@ docker compose up -d --build
 ### Posting Worker
 Фоновый воркер верифицирует балансы аккаунтов батчами по `postings.id`. Настраивается через `.env`:
 - `POSTING_WORKER_ENABLED` — включить/выключить
-- `POSTING_WORKER_NAME` — имя воркера (ключ курсора в БД, обязательно при enabled=true)
+- `POSTING_WORKER_NAME` — имя воркера (ключ курсора в БД, обязательное поле)
 - `POSTING_WORKER_BATCH_SIZE` — размер батча postings
 - `POSTING_WORKER_BACKOFF` — пауза при отсутствии новых postings
 
