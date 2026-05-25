@@ -57,8 +57,8 @@ func main() {
 		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(*tel.Metrics)),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer initCancel()
 
 	dsn := cfg.DSN
 	if dsn == "" {
@@ -66,14 +66,14 @@ func main() {
 			cfg.SuperUser, cfg.SuperUserPass, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode)
 	}
 
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, err := pgxpool.New(initCtx, dsn)
 	if err != nil {
 		lgr.Error("Unable to create connection pool", "error", err)
 		os.Exit(1)
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(ctx); err != nil {
+	if err := pool.Ping(initCtx); err != nil {
 		lgr.Error("Database is unreachable", "error", err, "dsn", dsn)
 		os.Exit(1)
 	}
@@ -85,7 +85,7 @@ func main() {
 	})
 	defer rdb.Close()
 
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	if err := rdb.Ping(initCtx).Err(); err != nil {
 		lgr.Error("Redis is unreachable", "error", err)
 		os.Exit(1)
 	}
@@ -113,6 +113,29 @@ func main() {
 
 	tel.Start(errCh)
 
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
+	if cfg.PostingWorkerEnabled {
+		postingWorker, err := usecase.NewPostingWorker(
+			repo,
+			repo,
+			repo,
+			lgr,
+			tel.Metrics,
+			cfg.PostingWorkerName,
+			cfg.PostingWorkerBatchSize,
+			cfg.PostingWorkerBackoff,
+		)
+		if err != nil {
+			lgr.Error("failed to create posting worker", "error", err)
+			os.Exit(1)
+		}
+
+		go postingWorker.Run(appCtx)
+		lgr.Info("posting worker is running", "name", cfg.PostingWorkerName)
+	}
+
 	go func() {
 		lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
 		if err := server.Serve(lis); err != nil {
@@ -131,6 +154,8 @@ func main() {
 	}
 
 	lgr.Info("Shutting down servers gracefully...")
+
+	appCancel()
 
 	server.GracefulStop()
 	lgr.Info("gRPC server stopped")
