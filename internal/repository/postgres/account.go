@@ -11,14 +11,14 @@ import (
 )
 
 func (db *Repository) CreateAccount(ctx context.Context, tx entity.CustomTx, acc *entity.Account) error {
-	query := `INSERT INTO ledger.accounts(user_id, amount, currency) VALUES($1, $2, $3)`
+	query := `INSERT INTO ledger.accounts(user_id, amount, currency, latest_posting_id) VALUES($1, $2, $3, $4)`
 
 	t, err := db.castTx(ctx, tx)
 	if err != nil {
 		return err
 	}
 
-	_, err = t.Exec(ctx, query, acc.ID, acc.Balance, acc.Currency)
+	_, err = t.Exec(ctx, query, acc.ID, acc.Balance, acc.Currency, acc.LatestPostingID)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to create account", "err", err, "user_id", acc.ID)
 		return fmt.Errorf("db: failed to create account: %w", err)
@@ -32,13 +32,13 @@ func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id u
 		return nil, err
 	}
 
-	query := `SELECT user_id, amount, currency, updated_at 
+	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at 
 			  FROM ledger.accounts
 			  WHERE user_id = $1
 			  FOR UPDATE`
 	var account entity.Account
 
-	err = t.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
+	err = t.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.LatestPostingID, &account.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, entity.ErrAccountNotFound
@@ -50,11 +50,11 @@ func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id u
 }
 
 func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Account, error) {
-	query := `select user_id, amount, currency, updated_at 
+	query := `select user_id, amount, currency, latest_posting_id, updated_at 
 		  FROM ledger.accounts
 		  WHERE user_id = $1`
 	var account entity.Account
-	err := db.pool.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.UpdatedAt)
+	err := db.pool.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.LatestPostingID, &account.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, entity.ErrAccountNotFound
