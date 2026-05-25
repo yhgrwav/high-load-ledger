@@ -6,7 +6,6 @@ import (
 	"high-load-ledger/internal/domain/entity"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error {
@@ -16,18 +15,32 @@ func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, po
 	}
 
 	query := `INSERT INTO ledger.postings (transaction_id, account_id, amount)
-			  VALUES($1, $2, $3)`
+			  VALUES($1, $2, $3)
+			  RETURNING id`
 
-	batch := &pgx.Batch{}
+	accountLatest := make(map[uuid.UUID]int64, len(postings))
 
 	for _, posting := range postings {
-		batch.Queue(query, posting.TransactionID, posting.AccountID, posting.Amount)
+		var id int64
+		if err := t.QueryRow(ctx, query, posting.TransactionID, posting.AccountID, posting.Amount).Scan(&id); err != nil {
+			db.logger.ErrorContext(ctx, "db: insert posting failed", "err", err)
+			return fmt.Errorf("db: insert posting failed: %w", err)
+		}
+		if id > accountLatest[posting.AccountID] {
+			accountLatest[posting.AccountID] = id
+		}
 	}
 
-	result := t.SendBatch(ctx, batch)
-	if err := result.Close(); err != nil {
-		db.logger.ErrorContext(ctx, "db: batch insert posting failed", "err", err)
-		return fmt.Errorf("db: batch insert posting failed: %w", err)
+	updateQuery := `UPDATE ledger.accounts
+	                SET latest_posting_id = GREATEST(latest_posting_id, $1),
+	                    updated_at = CURRENT_TIMESTAMP
+	                WHERE user_id = $2`
+
+	for accountID, latestID := range accountLatest {
+		if _, err := t.Exec(ctx, updateQuery, latestID, accountID); err != nil {
+			db.logger.ErrorContext(ctx, "db: update latest posting id failed", "err", err, "account_id", accountID)
+			return fmt.Errorf("db: update latest posting id failed: %w", err)
+		}
 	}
 
 	return nil
@@ -66,15 +79,5 @@ func (db *Repository) ListPostingsByAccountID(ctx context.Context, accountID uui
 }
 
 func (db *Repository) GetBalanceFromPostings(ctx context.Context, accountID uuid.UUID) (int64, error) {
-	query := `SELECT COALESCE(SUM(amount), 0) FROM ledger.postings WHERE account_id = $1`
-
-	var result int64
-
-	err := db.pool.QueryRow(ctx, query, accountID).Scan(&result)
-	if err != nil {
-		db.logger.ErrorContext(ctx, "db: get balance from postings failed", "err", err, "acc_id", accountID)
-		return 0, fmt.Errorf("db: get balance from postings failed: %w", err)
-	}
-
-	return result, nil
+	return db.GetPostingsSum(ctx, accountID, 0)
 }
