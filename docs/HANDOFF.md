@@ -22,11 +22,9 @@
 - **уникальный `idempotency_key` на каждый transfer** (UUID v4/v7)
 - отчёт: success/error rate, p50/p99 latency
 
-**Куда бить:** nginx (`8085`) — уже есть `least_conn` на `gateway-1` / `gateway-2`.
+**Куда бить:** nginx (`8085`) — `least_conn` на N реплик `gateway` (`docker compose --scale gateway=N`).
 
-**Перед нагрузкой:**
-- починить Prometheus targets в `docker/prometheus/prometheus.yml` (`gateway:6767` → `gateway-1:6767`, `gateway-2:6767`)
-- пробросить `POSTING_WORKER_*` в `docker-compose` для gateway
+**Prometheus:** DNS SD по имени сервиса `gateway:6767` (все реплики).
 
 **Не усложнять:** `golang.org/x/time/rate`, goroutine pool, gRPC-клиент из `gen/go`.
 
