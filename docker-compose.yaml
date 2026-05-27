@@ -1,9 +1,8 @@
 services:
-  gateway-1:
+  gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ledger_gateway_1
     restart: unless-stopped
     environment:
       DB_HOST: postgres
@@ -13,32 +12,13 @@ services:
       DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
       METRICS_PORT: ${METRICS_PORT}
       GRPC_PORT: ${GRPC_PORT}
-    ports:
-      - "50051:50051"
-      - "6767:6767"
-    networks:
-      - ledger_network
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  gateway-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ledger_gateway_2
-    restart: unless-stopped
-    environment:
-      DB_HOST: postgres
-      REDIS_HOST: redis
-      DB_NAME: ${DB_NAME}
-      DB_SUPER_USER: ${DB_SUPER_USER}
-      DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
-      METRICS_PORT: ${METRICS_PORT}
-      GRPC_PORT: ${GRPC_PORT}
-    ports:
-      - "50052:50051"
-      - "6768:6767"
+      POSTING_WORKER_ENABLED: ${POSTING_WORKER_ENABLED}
+      POSTING_WORKER_NAME: ${POSTING_WORKER_NAME}
+      POSTING_WORKER_BATCH_SIZE: ${POSTING_WORKER_BATCH_SIZE}
+      POSTING_WORKER_BACKOFF: ${POSTING_WORKER_BACKOFF}
+    expose:
+      - "50051"
+      - "6767"
     networks:
       - ledger_network
     depends_on:
@@ -56,8 +36,7 @@ services:
     networks:
       - ledger_network
     depends_on:
-      - gateway-1
-      - gateway-2
+      - gateway
 
   postgres:
     image: postgres:16-alpine
