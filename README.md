@@ -29,6 +29,7 @@ docker compose up -d --build --scale gateway=2
 ```
 
 Число реплик должно совпадать с `GATEWAY_REPLICAS` в `.env` (по умолчанию `2`).
+
 - миграции БД накатываются автоматически (`ledger-app-migrate`)
 - gRPC-балансировка — через nginx (`least_conn` + DNS resolve)
 
