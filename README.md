@@ -10,21 +10,40 @@
 
 **Требования:** Docker, Docker Compose, [grpcurl](https://github.com/fullstorydev/grpcurl)
 
+### Шаг 1. Клонирование и конфигурация
+
 ```bash
 git clone https://github.com/yhgrwav/high-load-ledger.git
 cd high-load-ledger
 
 cp .env.example .env
-docker compose up -d --build
 ```
 
-Миграции БД накатываются автоматически (`ledger-app-migrate`).
+Откройте `.env` и при необходимости измените значения.  
+Минимально достаточно оставить defaults из `.env.example` — главное, чтобы файл существовал.
 
-Проверка, что сервисы поднялись:
+### Шаг 2. Сборка и запуск
+
+```bash
+docker compose up -d --build --scale gateway=2
+```
+
+Число реплик должно совпадать с `GATEWAY_REPLICAS` в `.env` (по умолчанию `2`).
+
+- миграции БД накатываются автоматически (`ledger-app-migrate`)
+- gRPC-балансировка — через nginx (`least_conn` + DNS resolve)
+
+Проверка:
 
 ```bash
 docker compose ps
 grpcurl -plaintext localhost:8085 list
+```
+
+Остановка:
+
+```bash
+docker compose down
 ```
 
 ---
@@ -33,14 +52,19 @@ grpcurl -plaintext localhost:8085 list
 
 | Сервис | Адрес | Назначение |
 |--------|-------|------------|
-| gRPC (load balancer) | `localhost:8085` | **Основная точка входа** (nginx) |
-| gRPC gateway-1 | `localhost:50051` | Прямой доступ к инстансу |
-| gRPC gateway-2 | `localhost:50052` | Прямой доступ к инстансу |
-| Prometheus metrics | `http://localhost:6767/metrics` | Метрики gateway-1 |
+| gRPC (load balancer) | `localhost:8085` | **Основная точка входа** (nginx → N × gateway) |
 | Prometheus UI | `http://localhost:19090` | |
 | Grafana | `http://localhost:3000` | login: `admin` / `admin` |
 | PostgreSQL | `localhost:5433` | |
 | Redis | `localhost:6379` | |
+
+Метрики gateway (`/metrics`) доступны внутри Docker-сети; Prometheus собирает их со всех реплик через DNS service discovery.
+
+Масштабирование gateway без пересборки:
+
+```bash
+docker compose up -d --scale gateway=3
+```
 
 ---
 
@@ -119,6 +143,7 @@ grpcurl -plaintext -d '{
 | Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_TRANSACTION_TTL` |
 | Приложение | `GRPC_PORT`, `METRICS_PORT`, `SERVICE_NAME` |
 | Posting Worker | `POSTING_WORKER_ENABLED`, `POSTING_WORKER_NAME`, `POSTING_WORKER_BATCH_SIZE`, `POSTING_WORKER_BACKOFF` |
+| Docker Compose | `GATEWAY_REPLICAS` — число реплик gateway |
 
 Posting Worker — фоновая сверка `accounts.amount` с суммой проводок в `postings`.  
 `POSTING_WORKER_NAME` обязателен, если воркер включён.
@@ -149,7 +174,7 @@ docker/            — prometheus, grafana
 - [x] gRPC API, Clean Architecture, миграции
 - [x] Переводы с идемпотентностью
 - [x] PostingWorker (верификация балансов)
-- [x] Prometheus + Grafana, nginx (2 gateway)
+- [x] Prometheus + Grafana, nginx + scale gateway
 - [x] Unit-тесты usecase
 - [ ] Load generator (`loadgen/`)
 - [ ] Integration tests
