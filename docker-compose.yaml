@@ -12,10 +12,6 @@ services:
       DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
       METRICS_PORT: ${METRICS_PORT}
       GRPC_PORT: ${GRPC_PORT}
-      POSTING_WORKER_ENABLED: ${POSTING_WORKER_ENABLED}
-      POSTING_WORKER_NAME: ${POSTING_WORKER_NAME}
-      POSTING_WORKER_BATCH_SIZE: ${POSTING_WORKER_BATCH_SIZE}
-      POSTING_WORKER_BACKOFF: ${POSTING_WORKER_BACKOFF}
     expose:
       - "50051"
       - "6767"
@@ -24,6 +20,31 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  posting-worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME}
+      DB_SUPER_USER: ${DB_SUPER_USER}
+      DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
+      POSTING_WORKER_NAME: ${POSTING_WORKER_NAME}
+      POSTING_WORKER_BATCH_SIZE: ${POSTING_WORKER_BATCH_SIZE}
+      POSTING_WORKER_BACKOFF: ${POSTING_WORKER_BACKOFF}
+      METRICS_PORT: ${METRICS_PORT}
+      SERVICE_NAME: ledger-posting-worker
+    expose:
+      - "6767"
+    networks:
+      - ledger_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ledger-app-migrate:
+        condition: service_completed_successfully
 
   nginx:
     image: nginx:1.25-alpine
@@ -115,6 +136,35 @@ services:
       - "${REDIS_PORT}:6379"
     networks:
       - ledger_network
+
+  loadgen:
+    build:
+      context: .
+      dockerfile: docker/loadgen/Dockerfile
+    restart: "no"
+    environment:
+      LOAD_GEN_WORKING: ${LOAD_GEN_WORKING}
+      USERS_AMOUNT: ${USERS_AMOUNT}
+      VALID_RPS: ${VALID_RPS}
+      INVALID_RPS: ${INVALID_RPS}
+      INVALID_CURRENCY_RPS: ${INVALID_CURRENCY_RPS}
+      LOAD_DURATION: ${LOAD_DURATION}
+      LOAD_BOOTSTRAP_WORKERS: ${LOAD_BOOTSTRAP_WORKERS}
+      LOAD_TX_WORKERS: ${LOAD_TX_WORKERS}
+      BOOTSTRAP_MAX_ERROR_PCT: ${BOOTSTRAP_MAX_ERROR_PCT}
+      LOADGEN_GRPC_ADDR: nginx:80
+      LOADGEN_METRICS_PORT: ${LOADGEN_METRICS_PORT}
+    expose:
+      - "9092"
+    networks:
+      - ledger_network
+    depends_on:
+      nginx:
+        condition: service_started
+      gateway:
+        condition: service_started
+      ledger-app-migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
