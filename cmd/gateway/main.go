@@ -113,29 +113,6 @@ func main() {
 
 	tel.Start(errCh)
 
-	appCtx, appCancel := context.WithCancel(context.Background())
-	defer appCancel()
-
-	if cfg.PostingWorkerEnabled {
-		postingWorker, err := usecase.NewPostingWorker(
-			repo,
-			repo,
-			repo,
-			lgr,
-			tel.Metrics,
-			cfg.PostingWorkerName,
-			cfg.PostingWorkerBatchSize,
-			cfg.PostingWorkerBackoff,
-		)
-		if err != nil {
-			lgr.Error("failed to create posting worker", "error", err)
-			os.Exit(1)
-		}
-
-		go postingWorker.Run(appCtx)
-		lgr.Info("posting worker is running", "name", cfg.PostingWorkerName)
-	}
-
 	go func() {
 		lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
 		if err := server.Serve(lis); err != nil {
@@ -154,8 +131,6 @@ func main() {
 	}
 
 	lgr.Info("Shutting down servers gracefully...")
-
-	appCancel()
 
 	server.GracefulStop()
 	lgr.Info("gRPC server stopped")
