@@ -60,7 +60,7 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 			status = "system_error"
 		}
 
-		t.metrics.TransactionResultCounter.WithLabelValues(status).Inc()
+		t.metrics.RecordTransfer(status)
 	}()
 
 	if err := t.validateRequest(req); err != nil {
