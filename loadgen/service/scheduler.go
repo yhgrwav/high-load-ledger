@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-func poissonDelay(rps float64) time.Duration {
-	u := rand.Float64()
+func poissonDelay(rng *rand.Rand, rps float64) time.Duration {
+	u := rng.Float64()
 	if u <= 0 {
 		u = 1e-12
 	}
@@ -63,7 +63,7 @@ func runPoissonStream(
 			}
 		}
 
-		nextAt = nextAt.Add(poissonDelay(rps))
+		nextAt = nextAt.Add(poissonDelay(rng, rps))
 		if nextAt.Before(time.Now()) {
 			nextAt = time.Now()
 		}
