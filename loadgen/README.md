@@ -40,10 +40,12 @@ Loadgen гарантирует **отправку job'ов** (dispatch), а не
 
 1. **Poisson-scheduler** ведёт расписание `nextAt` — средняя частота = target RPS.
 2. Job считается dispatched **в момент постановки в очередь** (не когда worker освободился).
-3. Prometheus: `loadgen_target_rps` vs `rate(loadgen_requests_dispatched_total[1m])`.
+3. Prometheus: `loadgen_target_rps` vs `rate(loadgen_dispatched_total[1m])`.
 4. В конце прогона — проверка ±5% по каждому потоку (лог `loadgen WARN` или `within target tolerance`).
 
 Если workers/сервер не успевают, очередь растёт (`loadgen_queue_depth`), dispatch rate может упасть — это сигнал, что **target выше capacity стенда**.
+
+Метрики loadgen (namespace `loadgen_`): `target_rps`, `dispatched_total`, `completed_total{stream,outcome,grpc_code}`, `queue_depth`.
 
 `LOAD_DURATION` относится **только к load-фазе** (bootstrap не входит в таймер).
 
