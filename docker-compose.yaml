@@ -122,7 +122,7 @@ services:
     volumes:
       - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
       - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker/grafana/dashboards:/etc/grafana/dashboards:ro
     ports:
       - "3000:3000"
     networks:
@@ -143,7 +143,7 @@ services:
       dockerfile: docker/loadgen/Dockerfile
     restart: "no"
     environment:
-      LOAD_GEN_WORKING: ${LOAD_GEN_WORKING}
+      LOAD_GEN_WORKING: ${LOAD_GEN_WORKING:-true}
       USERS_AMOUNT: ${USERS_AMOUNT}
       VALID_RPS: ${VALID_RPS}
       INVALID_RPS: ${INVALID_RPS}
@@ -153,7 +153,7 @@ services:
       LOAD_TX_WORKERS: ${LOAD_TX_WORKERS}
       BOOTSTRAP_MAX_ERROR_PCT: ${BOOTSTRAP_MAX_ERROR_PCT}
       LOADGEN_GRPC_ADDR: nginx:80
-      LOADGEN_METRICS_PORT: ${LOADGEN_METRICS_PORT}
+      LOADGEN_METRICS_PORT: ${LOADGEN_METRICS_PORT:-9092}
     expose:
       - "9092"
     networks:
