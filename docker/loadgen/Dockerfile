@@ -14,7 +14,7 @@ WORKDIR /app
 
 COPY --from=builder /app/loadgen .
 COPY docker/loadgen/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 9092
 
