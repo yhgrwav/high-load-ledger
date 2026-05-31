@@ -68,6 +68,7 @@ Grafana (папка **High Load Ledger**):
 | **Ledger** | Transfer: business `result`, gRPC `code`, p99, system errors |
 | **Load Generator** | dispatch target/achieved, queue, gRPC errors на valid-потоке |
 | **Go Runtime** | goroutines / heap / GC по `job` |
+| **Инфраструктура** | Nginx, Postgres, Redis (экспортеры в compose) |
 
 Ключевые series: `ledger_transfer_total`, `ledger_grpc_requests_total{rpc,code}`, `loadgen_dispatched_total`, `loadgen_completed_total`.
 
@@ -191,7 +192,7 @@ docker/            — prometheus, grafana
 - [x] PostingWorker (верификация балансов)
 - [x] Prometheus + Grafana, nginx + scale gateway
 - [x] Unit-тесты usecase
-- [ ] Load generator (`loadgen/`)
+- [x] Load generator (`loadgen/`)
 - [ ] Integration tests
 - [ ] Kafka, Kubernetes
 - [ ] OpenTelemetry, шардирование PostgreSQL
