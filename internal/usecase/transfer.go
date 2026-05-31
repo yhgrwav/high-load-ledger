@@ -98,13 +98,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, entity.ErrInsufficientFunds
 	}
 
-	if err = t.repo.UpdateBalance(ctx, tx, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
-		return uuid.Nil, err
-	}
-	if err = t.repo.UpdateBalance(ctx, tx, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
-		return uuid.Nil, err
-	}
-
 	trx := entity.Transaction{
 		ID:             uuid.New(),
 		IdempotencyKey: req.IdempotencyKey,
@@ -130,6 +123,13 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		{TransactionID: trx.ID, AccountID: req.ToAccountID, Amount: req.Amount},
 	}
 	if err = t.repo.CreatePostings(ctx, tx, postings); err != nil {
+		return uuid.Nil, err
+	}
+
+	if err = t.repo.UpdateBalance(ctx, tx, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
+		return uuid.Nil, err
+	}
+	if err = t.repo.UpdateBalance(ctx, tx, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
 		return uuid.Nil, err
 	}
 
