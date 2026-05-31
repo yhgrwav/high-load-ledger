@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,17 +11,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/grpc"
 
-	ledger "high-load-ledger/gen/go"
 	"high-load-ledger/internal/config"
 	"high-load-ledger/internal/infra/logger"
 	"high-load-ledger/internal/infra/telemetry"
 	"high-load-ledger/internal/repository/postgres"
-	redisRepo "high-load-ledger/internal/repository/redis"
-	transport "high-load-ledger/internal/transport/grpc"
-	"high-load-ledger/internal/transport/grpc/interceptors"
 	"high-load-ledger/internal/usecase"
 )
 
@@ -47,15 +40,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+	if cfg.PostingWorkerName == "" {
+		log.Fatal("POSTING_WORKER_NAME is required")
+	}
 
 	lgr := logger.New(cfg.LogLevel, cfg.AddSource, cfg.IsJSON)
-	lgr.Info("Ledger starting...", "user", cfg.DBUser, "host", cfg.DBHost)
+	lgr.Info("Posting worker starting...", "name", cfg.PostingWorkerName, "host", cfg.DBHost)
 
 	tel := telemetry.New(cfg, *lgr)
-
-	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(*tel.Metrics)),
-	)
 
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer initCancel()
@@ -78,47 +70,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
-	})
-	defer rdb.Close()
-
-	if err := rdb.Ping(initCtx).Err(); err != nil {
-		lgr.Error("Redis is unreachable", "error", err)
-		os.Exit(1)
-	}
-
 	repo := postgres.NewConnectionPool(pool, lgr)
 
-	cacheRepo := redisRepo.NewCacheRepository(rdb, lgr)
-
-	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, cfg.RedisTransactionTTL, tel.Metrics)
-	accountUC := usecase.NewAccountUseCase(repo, lgr)
-
-	handler := transport.NewHandler(transferUC, accountUC, lgr)
-
-	ledger.RegisterTransactionServiceServer(server, handler)
-	ledger.RegisterAccountServiceServer(server, handler)
-	ledger.RegisterStatsServiceServer(server, handler)
-
-	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	postingWorker, err := usecase.NewPostingWorker(
+		repo,
+		repo,
+		repo,
+		lgr,
+		tel.Metrics,
+		cfg.PostingWorkerName,
+		cfg.PostingWorkerBatchSize,
+		cfg.PostingWorkerBackoff,
+	)
 	if err != nil {
-		lgr.Error("failed to listen", "error", err)
+		lgr.Error("failed to create posting worker", "error", err)
 		os.Exit(1)
 	}
 
 	errCh := make(chan error, 1)
-
 	tel.Start(errCh)
 
-	go func() {
-		lgr.Info("gRPC server is running", "port", cfg.GRPCPort)
-		if err := server.Serve(lis); err != nil {
-			errCh <- fmt.Errorf("gRPC server failed: %w", err)
-		}
-	}()
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
+	go postingWorker.Run(appCtx)
+	lgr.Info("posting worker is running", "name", cfg.PostingWorkerName)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -130,14 +106,12 @@ func main() {
 		lgr.Info("Received shutdown signal", "signal", sig.String())
 	}
 
-	lgr.Info("Shutting down servers gracefully...")
-
-	server.GracefulStop()
-	lgr.Info("gRPC server stopped")
+	lgr.Info("Shutting down posting worker gracefully...")
+	appCancel()
 
 	if err := tel.Stop(context.Background()); err != nil {
 		lgr.Error("failed to shutdown telemetry", "error", err)
 	}
 
-	lgr.Info("Ledger stopped completely")
+	lgr.Info("Posting worker stopped completely")
 }

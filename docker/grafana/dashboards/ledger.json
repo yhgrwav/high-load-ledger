@@ -5,88 +5,84 @@
   "tags": ["business"],
   "style": "dark",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "id": 1,
-      "title": "gRPC: Total Requests (Counter)",
+      "title": "gRPC Requests / sec",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(ledger_grpc_total_requests) by (method)",
-          "legendFormat": "{{method}}"
-        }
-      ],
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
-    },
-    {
-      "id": 2,
-      "title": "gRPC: Request Duration (p99 Latency)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(ledger_grpc_request_duration_bucket[5m])) by (le, method))",
-          "legendFormat": "p99 {{method}}"
-        }
-      ],
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "fieldConfig": { "defaults": { "unit": "s" } }
-      }
-    },
-    {
-      "id": 3,
-      "title": "Business: Transaction Execution Statuses",
-      "type": "barchart",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum(ledger_transaction_execution_total) by (status)",
-          "legendFormat": "{{status}}"
-        }
-      ],
-      "options": {
-        "orientation": "auto",
-        "showValue": "all",
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
-      }
-    },
-    {
-      "id": 4,
-      "title": "Technical: Current RPS Rate (1m window)",
-      "type": "timeseries",
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum(rate(ledger_grpc_total_requests[1m])) by (method, code)",
           "legendFormat": "{{method}} ({{code}})"
         }
       ],
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "title": "gRPC p99 Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(ledger_grpc_request_duration_bucket[5m])) by (le, method))",
+          "legendFormat": "p99 {{method}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } }
+    },
+    {
+      "id": 3,
+      "title": "Transfer Results / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ledger_transaction_execution_total[1m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "title": "Transfer RPS by gRPC Code",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ledger_grpc_total_requests{method=~\".*Transfer\"}[1m])) by (code)",
+          "legendFormat": "{{code}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     },
     {
       "id": 5,
-      "title": "Posting Worker: Balance Corrections",
+      "title": "Posting Worker Corrections",
       "type": "timeseries",
       "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "posting_worker_balances_corrected_total",
-          "legendFormat": "corrections total"
+          "legendFormat": "total"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "rate(posting_worker_balances_corrected_total[5m])",
-          "legendFormat": "corrections/sec (5m)"
+          "legendFormat": "rate"
         }
       ],
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }

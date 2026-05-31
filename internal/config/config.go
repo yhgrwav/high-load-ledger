@@ -28,8 +28,7 @@ type Config struct {
 	IsJSON                 bool          `env:"IS_JSON" envDefault:"true"`
 	ServiceName            string        `env:"SERVICE_NAME" envDefault:"ledger"`
 	MetricsPort            string        `env:"METRICS_PORT" envDefault:"6767"`
-	PostingWorkerEnabled   bool          `env:"POSTING_WORKER_ENABLED" envDefault:"true"`
-	PostingWorkerName      string        `env:"POSTING_WORKER_NAME,required,notEmpty"`
+	PostingWorkerName      string        `env:"POSTING_WORKER_NAME" envDefault:"balance_verifier"`
 	PostingWorkerBatchSize int           `env:"POSTING_WORKER_BATCH_SIZE" envDefault:"100"`
 	PostingWorkerBackoff   time.Duration `env:"POSTING_WORKER_BACKOFF" envDefault:"5s"`
 }
