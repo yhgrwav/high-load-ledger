@@ -61,6 +61,16 @@ docker compose down
 
 Метрики gateway (`/metrics`) доступны внутри Docker-сети; Prometheus собирает их со всех реплик через DNS service discovery.
 
+Grafana (папка **High Load Ledger**):
+
+| Дашборд | Содержание |
+|---------|------------|
+| **Ledger** | Transfer: business `result`, gRPC `code`, p99, system errors |
+| **Load Generator** | dispatch target/achieved, queue, gRPC errors на valid-потоке |
+| **Go Runtime** | goroutines / heap / GC по `job` |
+
+Ключевые series: `ledger_transfer_total`, `ledger_grpc_requests_total{rpc,code}`, `loadgen_dispatched_total`, `loadgen_completed_total`.
+
 Масштабирование gateway без пересборки:
 
 ```bash
