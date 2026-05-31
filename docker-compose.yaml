@@ -59,6 +59,17 @@ services:
     depends_on:
       - gateway
 
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.0
+    container_name: ledger_nginx_exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://ledger_nginx/stub_status
+    networks:
+      - ledger_network
+    depends_on:
+      - nginx
+
   postgres:
     image: postgres:16-alpine
     container_name: ledger_postgres
@@ -136,6 +147,29 @@ services:
       - "${REDIS_PORT}:6379"
     networks:
       - ledger_network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    container_name: ledger_redis_exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    networks:
+      - ledger_network
+    depends_on:
+      - redis
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: ledger_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: postgresql://${DB_SUPER_USER}:${DB_SUPER_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
+    networks:
+      - ledger_network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   loadgen:
     build:
