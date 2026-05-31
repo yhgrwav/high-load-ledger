@@ -46,7 +46,7 @@
 
 ### Edge-cases проекта
 
-1. **Posting Worker на N репликах** — сейчас каждый gateway запускает worker с одним `POSTING_WORKER_NAME` → гонка за `worker_cursors`. **Решение:** отдельный Deployment `replicas: 1` для worker.
+1. **Posting Worker на N репликах** — **исправлено:** worker вынесен в `cmd/worker` / compose-сервис `posting-worker` (1 реплика). Gateway масштабируется отдельно (`--scale gateway=N`).
 
 2. **Идемпотентность** — Redis + `UNIQUE(idempotency_key)` в DB. Kafka consumer: проверка idempotency **до** side effects, commit offset **после** commit tx.
 

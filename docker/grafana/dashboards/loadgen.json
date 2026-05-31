@@ -1,0 +1,73 @@
+{
+  "editable": true,
+  "title": "Load Generator",
+  "tags": ["loadgen"],
+  "style": "dark",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Target vs Achieved Dispatch RPS",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "loadgen_target_rps",
+          "legendFormat": "target {{stream}}"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(loadgen_requests_dispatched_total[1m])) by (stream)",
+          "legendFormat": "achieved {{stream}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "mean"] }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Completed Requests by Stream",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(loadgen_requests_completed_total{result=\"ok\"}[1m])) by (stream)",
+          "legendFormat": "ok {{stream}}"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(loadgen_requests_completed_total{result=\"error\"}[1m])) by (stream)",
+          "legendFormat": "error {{stream}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Job Queue Depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "loadgen_queue_depth",
+          "legendFormat": "queue depth"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" }
+      }
+    }
+  ]
+}

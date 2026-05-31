@@ -28,7 +28,8 @@ cp .env.example .env
 docker compose up -d --build --scale gateway=2
 ```
 
-Число реплик должно совпадать с `GATEWAY_REPLICAS` в `.env` (по умолчанию `2`).
+Число реплик gateway должно совпадать с `GATEWAY_REPLICAS` в `.env` (по умолчанию `2`).  
+Сервис `posting-worker` поднимается **один раз** — не масштабировать (`--scale posting-worker=1` по умолчанию).
 
 - миграции БД накатываются автоматически (`ledger-app-migrate`)
 - gRPC-балансировка — через nginx (`least_conn` + DNS resolve)
@@ -142,11 +143,11 @@ grpcurl -plaintext -d '{
 | PostgreSQL | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_SUPER_USER`, `DB_SUPER_PASSWORD` |
 | Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_TRANSACTION_TTL` |
 | Приложение | `GRPC_PORT`, `METRICS_PORT`, `SERVICE_NAME` |
-| Posting Worker | `POSTING_WORKER_ENABLED`, `POSTING_WORKER_NAME`, `POSTING_WORKER_BATCH_SIZE`, `POSTING_WORKER_BACKOFF` |
-| Docker Compose | `GATEWAY_REPLICAS` — число реплик gateway |
+| Posting Worker | `POSTING_WORKER_NAME`, `POSTING_WORKER_BATCH_SIZE`, `POSTING_WORKER_BACKOFF` — только для `cmd/worker` / сервиса `posting-worker` |
+| Docker Compose | `GATEWAY_REPLICAS` — число реплик gateway (`--scale gateway=N`) |
 
 Posting Worker — фоновая сверка `accounts.amount` с суммой проводок в `postings`.  
-`POSTING_WORKER_NAME` обязателен, если воркер включён.
+Запускается **отдельным процессом** (`cmd/worker`), не внутри gateway — иначе при `--scale gateway=N` несколько воркеров гоняются за одним курсором в БД.
 
 ---
 
@@ -154,13 +155,17 @@ Posting Worker — фоновая сверка `accounts.amount` с суммой
 
 ```bash
 go test ./internal/usecase/... -v   # unit-тесты
+go run ./cmd/gateway               # gRPC API
+go run ./cmd/worker                # posting worker (отдельный терминал)
 make gen                            # protobuf (нужен protoc)
 ```
 
 Структура:
 
 ```
-cmd/gateway/       — точка входа
+cmd/gateway/       — gRPC API
+cmd/worker/        — PostingWorker (один инстанс)
+cmd/loadgen/       — нагрузочный генератор
 api/ledger/        — protobuf
 internal/          — domain, usecase, repository, transport
 migrations/        — SQL
