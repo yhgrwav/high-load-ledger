@@ -54,7 +54,7 @@ func main() {
 	tel := telemetry.New(cfg, *lgr)
 
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(*tel.Metrics)),
+		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(tel.Metrics)),
 	)
 
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -66,7 +66,24 @@ func main() {
 			cfg.SuperUser, cfg.SuperUserPass, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode)
 	}
 
-	pool, err := pgxpool.New(initCtx, dsn)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		lgr.Error("Unable to parse pool config", "error", err)
+		os.Exit(1)
+	}
+
+	// захардкодил пока настройки, думаю всё равно никто не захочет больше одного раза запускать это приложение с разными настройками, а мне в 10 раз меньше
+	// надо будет писать мусорного кода, который не будет нести в себе никакого смысла кроме "идиоматичности"
+	// здесь я просто дал возможность базе обрабатывать больше соединений, что является максимально простым способом
+	// увеличить пропускную способность, затем уже в бой полетят более сложные приёмы.
+
+	poolCfg.MaxConns = 32
+	poolCfg.MinConns = 8
+	poolCfg.MaxConnLifetime = 30 * time.Minute
+	poolCfg.MaxConnIdleTime = 5 * time.Minute
+	poolCfg.HealthCheckPeriod = 30 * time.Second
+
+	pool, err := pgxpool.NewWithConfig(initCtx, poolCfg)
 	if err != nil {
 		lgr.Error("Unable to create connection pool", "error", err)
 		os.Exit(1)
