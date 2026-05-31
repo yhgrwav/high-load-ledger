@@ -10,12 +10,16 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc/status"
 )
 
 const (
 	StreamValid           = "valid"
 	StreamInvalidBalance  = "invalid_balance"
 	StreamInvalidCurrency = "invalid_currency"
+
+	outcomeOK    = "ok"
+	outcomeError = "error"
 )
 
 type Metrics struct {
@@ -29,20 +33,24 @@ type Metrics struct {
 func NewMetrics(port string) *Metrics {
 	m := &Metrics{
 		targetRPS: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "loadgen_target_rps",
-			Help: "Configured target RPS per load stream.",
+			Namespace: "loadgen",
+			Name:      "target_rps",
+			Help:      "Configured target dispatch RPS per stream.",
 		}, []string{"stream"}),
 		dispatched: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "loadgen_requests_dispatched_total",
-			Help: "Transfer jobs sent to workers per stream.",
+			Namespace: "loadgen",
+			Name:      "dispatched_total",
+			Help:      "Transfer jobs queued for workers.",
 		}, []string{"stream"}),
 		completed: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "loadgen_requests_completed_total",
-			Help: "Finished gRPC transfer calls per stream and result.",
-		}, []string{"stream", "result"}),
+			Namespace: "loadgen",
+			Name:      "completed_total",
+			Help:      "Finished gRPC Transfer calls from loadgen.",
+		}, []string{"stream", "outcome", "grpc_code"}),
 		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "loadgen_queue_depth",
-			Help: "Current number of transfer jobs waiting for workers.",
+			Namespace: "loadgen",
+			Name:      "queue_depth",
+			Help:      "Transfer jobs waiting in the channel.",
 		}),
 	}
 
@@ -66,11 +74,16 @@ func (m *Metrics) RecordDispatched(stream string) {
 }
 
 func (m *Metrics) RecordCompleted(stream string, err error) {
-	result := "ok"
+	outcome := outcomeOK
+	grpcCode := "OK"
 	if err != nil {
-		result = "error"
+		outcome = outcomeError
+		grpcCode = "Unknown"
+		if st, ok := status.FromError(err); ok {
+			grpcCode = st.Code().String()
+		}
 	}
-	m.completed.WithLabelValues(stream, result).Inc()
+	m.completed.WithLabelValues(stream, outcome, grpcCode).Inc()
 }
 
 func (m *Metrics) SetQueueDepth(depth int) {
