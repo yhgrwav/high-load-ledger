@@ -1,61 +1,60 @@
 {
-  "editable": true,
-  "id": null,
-  "title": "Go Runtime Monitoring",
+  "uid": "go-runtime-monitoring",
+  "title": "Go Runtime",
   "tags": ["infrastructure"],
-  "style": "dark",
-  "schemaVersion": 38,
-  "version": 1,
-  "refresh": "5s",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 3,
+  "refresh": "10s",
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "id": 1,
-      "title": "Runtime: Active Goroutines",
+      "title": "Goroutines by job",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "go_goroutines",
-          "legendFormat": "Goroutines"
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(go_goroutines{job=~\"ledger-gateway|ledger-posting-worker\"}) by (job)",
+          "legendFormat": "{{job}}"
         }
       ],
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     },
     {
       "id": 2,
-      "title": "Runtime: Heap Memory Allocation",
+      "title": "Heap allocated by job",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "go_memstats_alloc_bytes",
-          "legendFormat": "Allocated Bytes"
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(go_memstats_alloc_bytes{job=~\"ledger-gateway|ledger-posting-worker\"}) by (job)",
+          "legendFormat": "{{job}}"
         }
       ],
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "fieldConfig": { "defaults": { "unit": "bytes" } }
-      }
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     },
     {
       "id": 3,
-      "title": "Runtime: GC Duration Quantiles (p99)",
+      "title": "GC pause p99 by job",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "go_gc_duration_seconds{quantile=\"0.99\"}",
-          "legendFormat": "p99 GC Pause"
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(go_gc_duration_seconds_bucket{job=~\"ledger-gateway|ledger-posting-worker\"}[2m])) by (le, job))",
+          "legendFormat": "p99 {{job}}"
         }
       ],
-      "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "fieldConfig": { "defaults": { "unit": "s" } }
-      }
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     }
   ]
 }

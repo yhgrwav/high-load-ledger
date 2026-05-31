@@ -1,73 +1,111 @@
 {
-  "editable": true,
+  "uid": "load-generator",
   "title": "Load Generator",
   "tags": ["loadgen"],
-  "style": "dark",
-  "schemaVersion": 38,
-  "version": 1,
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "id": 1,
-      "title": "Target vs Achieved Dispatch RPS",
+      "title": "Dispatch: target vs achieved (RPS)",
+      "description": "Target = configured RPS. Achieved = jobs/sec actually queued. Requires loadgen container Up.",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
       "targets": [
         {
+          "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "loadgen_target_rps",
           "legendFormat": "target {{stream}}"
         },
         {
+          "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(loadgen_requests_dispatched_total[1m])) by (stream)",
-          "legendFormat": "achieved {{stream}}"
+          "expr": "sum(rate(loadgen_dispatched_total[1m])) by (stream)",
+          "legendFormat": "dispatched {{stream}}"
         }
       ],
-      "fieldConfig": {
-        "defaults": { "unit": "reqps" }
-      },
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "mean"] }
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max", "lastNotNull"] }
       }
     },
     {
       "id": 2,
-      "title": "Completed Requests by Stream",
+      "title": "Completed Transfer / sec (ok vs error)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
       "targets": [
         {
+          "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(loadgen_requests_completed_total{result=\"ok\"}[1m])) by (stream)",
+          "expr": "sum(rate(loadgen_completed_total{outcome=\"ok\"}[1m])) by (stream)",
           "legendFormat": "ok {{stream}}"
         },
         {
+          "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(loadgen_requests_completed_total{result=\"error\"}[1m])) by (stream)",
+          "expr": "sum(rate(loadgen_completed_total{outcome=\"error\"}[1m])) by (stream)",
           "legendFormat": "error {{stream}}"
         }
       ],
-      "fieldConfig": {
-        "defaults": { "unit": "reqps" }
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }
       }
     },
     {
       "id": 3,
-      "title": "Job Queue Depth",
+      "title": "Job queue depth",
+      "description": "Backpressure: grows when workers slower than dispatch.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
       "targets": [
         {
+          "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "loadgen_queue_depth",
-          "legendFormat": "queue depth"
+          "legendFormat": "queued jobs"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "gRPC errors / sec by code (valid stream)",
+      "description": "Only stream=valid — separates expected invalid scenarios from overload.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(loadgen_completed_total{stream=\"valid\", outcome=\"error\"}[1m])) by (grpc_code)",
+          "legendFormat": "{{grpc_code}}"
         }
       ],
-      "fieldConfig": {
-        "defaults": { "unit": "none" }
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }
       }
+    },
+    {
+      "id": 5,
+      "title": "Error ratio (valid stream)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(loadgen_completed_total{stream=\"valid\", outcome=\"error\"}[1m])) / sum(rate(loadgen_completed_total{stream=\"valid\"}[1m]))",
+          "legendFormat": "error ratio"
+        }
+      ]
     }
   ]
 }

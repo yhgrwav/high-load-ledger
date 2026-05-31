@@ -1,11 +1,13 @@
 apiVersion: 1
 
 providers:
-  - name: 'Ledger Dashboards'
+  - name: Ledger Dashboards
     orgId: 1
-    folder: ''
+    folder: High Load Ledger
     type: file
-    disableDeletion: false
-    updateIntervalSeconds: 5
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
     options:
-      path: /var/lib/grafana/dashboards
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
