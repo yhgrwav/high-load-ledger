@@ -245,7 +245,7 @@ func (w *PostingWorker) correctBalance(ctx context.Context, id uuid.UUID) error 
 		}
 
 		if w.metrics != nil {
-			w.metrics.PostingBalancesCorrected.Inc()
+			w.metrics.RecordBalanceCorrection()
 		}
 		w.logger.WarnContext(ctx, "posting worker: balance corrected", "account_id", id, "balance", fullSum)
 		return nil
