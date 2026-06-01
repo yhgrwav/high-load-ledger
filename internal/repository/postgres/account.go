@@ -65,6 +65,30 @@ func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Accoun
 	return &account, nil
 }
 
+func (db *Repository) GetInTx(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at
+			  FROM ledger.accounts
+			  WHERE user_id = $1`
+
+	var account entity.Account
+	err = t.QueryRow(ctx, query, id).Scan(
+		&account.ID, &account.Balance, &account.Currency, &account.LatestPostingID, &account.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, entity.ErrAccountNotFound
+		}
+		db.logger.ErrorContext(ctx, "db: failed to get account in tx", "err", err, "id", id)
+		return nil, fmt.Errorf("db: failed to get account in tx: %w", err)
+	}
+	return &account, nil
+}
+
 func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
 
 	t, err := db.castTx(ctx, tx)
@@ -79,6 +103,48 @@ func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id 
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
 		return fmt.Errorf("db: failed to update balance: %w", err)
+	}
+	return nil
+}
+
+func (db *Repository) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	query := `UPDATE ledger.accounts
+              SET amount = amount - $1, updated_at = CURRENT_TIMESTAMP
+              WHERE user_id = $2 AND amount >= $1`
+
+	tag, err := t.Exec(ctx, query, amount, id)
+	if err != nil {
+		db.logger.ErrorContext(ctx, "db: failed to debit balance", "err", err, "id", id)
+		return fmt.Errorf("db: failed to debit balance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return entity.ErrInsufficientFunds
+	}
+	return nil
+}
+
+func (db *Repository) CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	query := `UPDATE ledger.accounts
+              SET amount = amount + $1, updated_at = CURRENT_TIMESTAMP
+              WHERE user_id = $2`
+
+	tag, err := t.Exec(ctx, query, amount, id)
+	if err != nil {
+		db.logger.ErrorContext(ctx, "db: failed to credit balance", "err", err, "id", id)
+		return fmt.Errorf("db: failed to credit balance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return entity.ErrAccountNotFound
 	}
 	return nil
 }
