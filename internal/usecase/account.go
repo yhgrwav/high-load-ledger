@@ -71,8 +71,14 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 			return uuid.Nil, err
 		}
 
+		var trxID uuid.UUID
+		trxID, err = uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, err
+		}
+
 		trx := entity.Transaction{
-			ID:             uuid.New(),
+			ID:             trxID,
 			IdempotencyKey: openingKey,
 			FromAccountID:  id,
 			ToAccountID:    id,
