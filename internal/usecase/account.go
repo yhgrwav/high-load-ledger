@@ -40,7 +40,8 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 		return uuid.Nil, err
 	}
 
-	balance := int64(rand.Int())
+	// генерацию баланса ограничил до миллиона, потому что иначе база падает с ошибкой bigint out of range
+	balance := int64(rand.Int63n(1000000))
 
 	account := &entity.Account{
 		ID:        id,
