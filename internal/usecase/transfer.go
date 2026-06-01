@@ -1,7 +1,6 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"high-load-ledger/internal/domain/entity"
@@ -75,6 +74,10 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
+	if err = t.validateTransferCurrencies(ctx, req.FromAccountID, req.ToAccountID, req.Currency); err != nil {
+		return uuid.Nil, err
+	}
+
 	tx, err := t.repo.BeginTx(ctx)
 	if err != nil {
 		return uuid.Nil, err
@@ -86,20 +89,21 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		}
 	}()
 
-	fromAcc, toAcc, err := t.loadTransferAccounts(ctx, tx, req.FromAccountID, req.ToAccountID)
+	if _, err = t.repo.GetForUpdate(ctx, tx, req.FromAccountID); err != nil {
+		return uuid.Nil, err
+	}
+
+	if _, err = t.repo.GetInTx(ctx, tx, req.ToAccountID); err != nil {
+		return uuid.Nil, err
+	}
+
+	trxID, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if fromAcc.Currency != req.Currency || toAcc.Currency != req.Currency {
-		return uuid.Nil, entity.ErrCurrencyMismatch
-	}
-	if fromAcc.Balance < req.Amount {
-		return uuid.Nil, entity.ErrInsufficientFunds
-	}
-
 	trx := entity.Transaction{
-		ID:             uuid.New(),
+		ID:             trxID,
 		IdempotencyKey: req.IdempotencyKey,
 		FromAccountID:  req.FromAccountID,
 		ToAccountID:    req.ToAccountID,
@@ -126,10 +130,10 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
-	if err = t.repo.UpdateBalance(ctx, tx, req.FromAccountID, fromAcc.Balance-req.Amount); err != nil {
+	if err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount); err != nil {
 		return uuid.Nil, err
 	}
-	if err = t.repo.UpdateBalance(ctx, tx, req.ToAccountID, toAcc.Balance+req.Amount); err != nil {
+	if err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount); err != nil {
 		return uuid.Nil, err
 	}
 
@@ -176,23 +180,22 @@ func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
 	return nil
 }
 
-func (t *TransferUseCase) loadTransferAccounts(ctx context.Context, tx entity.CustomTx, fromID, toID uuid.UUID) (*entity.Account, *entity.Account, error) {
-	lockFirstID, lockSecondID := fromID, toID
-	if bytes.Compare(lockFirstID[:], lockSecondID[:]) > 0 {
-		lockFirstID, lockSecondID = lockSecondID, lockFirstID
+func (t *TransferUseCase) validateTransferCurrencies(ctx context.Context, fromID, toID uuid.UUID, currency entity.Currency) error {
+	fromAcc, err := t.repo.GetByID(ctx, fromID)
+	if err != nil {
+		return err
+	}
+	if fromAcc.Currency != currency {
+		return entity.ErrCurrencyMismatch
 	}
 
-	lockFirstAcc, err := t.repo.GetForUpdate(ctx, tx, lockFirstID)
+	toAcc, err := t.repo.GetByID(ctx, toID)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	lockSecondAcc, err := t.repo.GetForUpdate(ctx, tx, lockSecondID)
-	if err != nil {
-		return nil, nil, err
+	if toAcc.Currency != currency {
+		return entity.ErrCurrencyMismatch
 	}
 
-	if lockFirstID == fromID {
-		return lockFirstAcc, lockSecondAcc, nil
-	}
-	return lockSecondAcc, lockFirstAcc, nil
+	return nil
 }
