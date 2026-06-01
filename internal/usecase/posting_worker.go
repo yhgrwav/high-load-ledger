@@ -186,7 +186,7 @@ func (w *PostingWorker) Run(ctx context.Context) {
 func (w *PostingWorker) ValidateBalance(ctx context.Context, id uuid.UUID, batchMaxID int64) error {
 	effectiveMax := batchMaxID
 
-	for step := 0; step < maxBalanceVersionSteps; step++ {
+	for range maxBalanceVersionSteps {
 		// прерываем проверку аккаунта, если приложение получило сигнал shutdown
 		if err := ctx.Err(); err != nil {
 			return err
