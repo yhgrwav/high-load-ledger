@@ -82,7 +82,7 @@ services:
     ports:
       - "${DB_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - ledger_network
