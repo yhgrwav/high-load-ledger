@@ -89,14 +89,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		}
 	}()
 
-	if _, err = t.repo.GetForUpdate(ctx, tx, req.FromAccountID); err != nil {
-		return uuid.Nil, err
-	}
-
-	if _, err = t.repo.GetInTx(ctx, tx, req.ToAccountID); err != nil {
-		return uuid.Nil, err
-	}
-
 	trxID, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, err
@@ -113,12 +105,13 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	if err = t.repo.CreateTransaction(ctx, tx, &trx); err != nil {
-		existing, err := t.repo.CheckIdempotencyKey(ctx, req.IdempotencyKey)
-		if err == nil {
-			_ = t.repo.RollbackTx(ctx, tx)
-			_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, existing.ID[:], t.idempotencyKeyTTL)
-			return existing.ID, nil
+		_ = t.repo.RollbackTx(ctx, tx)
+
+		existingID, checkErr := t.checkIdempotency(ctx, req.IdempotencyKey)
+		if checkErr == nil {
+			return existingID, nil
 		}
+
 		return uuid.Nil, err
 	}
 
@@ -130,10 +123,20 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
-	if err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount); err != nil {
-		return uuid.Nil, err
+	// сортировка чтобы не словить дедлок
+	if req.FromAccountID.String() < req.ToAccountID.String() {
+		err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount)
+		if err == nil {
+			err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount)
+		}
+	} else {
+		err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount)
+		if err == nil {
+			err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount)
+		}
 	}
-	if err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount); err != nil {
+
+	if err != nil {
 		return uuid.Nil, err
 	}
 
@@ -154,14 +157,14 @@ func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (
 		}
 	}
 
-	trx, err := t.repo.CheckIdempotencyKey(ctx, key)
+	uid, err := t.repo.CheckIdempotencyKey(ctx, key)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	_ = t.cache.SetIdempotencyKey(ctx, key, trx.ID[:], t.idempotencyKeyTTL)
+	_ = t.cache.SetIdempotencyKey(ctx, key, uid[:], t.idempotencyKeyTTL)
 
-	return trx.ID, nil
+	return uid, nil
 }
 
 func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
@@ -181,19 +184,54 @@ func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
 }
 
 func (t *TransferUseCase) validateTransferCurrencies(ctx context.Context, fromID, toID uuid.UUID, currency entity.Currency) error {
-	fromAcc, err := t.repo.GetByID(ctx, fromID)
-	if err != nil {
-		return err
+	var fromCurrency, toCurrency entity.Currency
+	var err error
+
+	// сначала проверяем валюту
+	fromCurrency, err = t.cache.GetAccountCurrency(ctx, fromID)
+	if err != nil || fromCurrency == entity.CURRENCY_UNSPECIFIED {
+		fromCurrency = entity.CURRENCY_UNSPECIFIED
 	}
-	if fromAcc.Currency != currency {
-		return entity.ErrCurrencyMismatch
+	toCurrency, err = t.cache.GetAccountCurrency(ctx, toID)
+	if err != nil || toCurrency == entity.CURRENCY_UNSPECIFIED {
+		toCurrency = entity.CURRENCY_UNSPECIFIED
 	}
 
-	toAcc, err := t.repo.GetByID(ctx, toID)
-	if err != nil {
-		return err
+	// если нет в кэше - идём в базу
+	missingIDs := make([]uuid.UUID, 0, 2)
+	if fromCurrency == entity.CURRENCY_UNSPECIFIED {
+		missingIDs = append(missingIDs, fromID)
 	}
-	if toAcc.Currency != currency {
+	if toCurrency == entity.CURRENCY_UNSPECIFIED {
+		missingIDs = append(missingIDs, toID)
+	}
+
+	if len(missingIDs) > 0 {
+		currencies, err := t.repo.GetCurrencies(ctx, missingIDs)
+		if err != nil {
+			return err
+		}
+
+		if fromCurrency == entity.CURRENCY_UNSPECIFIED {
+			if c, ok := currencies[fromID]; ok {
+				fromCurrency = c
+				_ = t.cache.SetAccountCurrency(ctx, fromID, c, 24*time.Hour)
+			} else {
+				return entity.ErrAccountNotFound
+			}
+		}
+
+		if toCurrency == entity.CURRENCY_UNSPECIFIED {
+			if c, ok := currencies[toID]; ok {
+				toCurrency = c
+				_ = t.cache.SetAccountCurrency(ctx, toID, c, 24*time.Hour)
+			} else {
+				return entity.ErrAccountNotFound
+			}
+		}
+	}
+
+	if fromCurrency != currency || toCurrency != currency {
 		return entity.ErrCurrencyMismatch
 	}
 
