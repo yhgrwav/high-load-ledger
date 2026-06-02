@@ -12,7 +12,7 @@ import (
 )
 
 func TestAccountUseCase_CreateAccount_invalidCurrency(t *testing.T) {
-	uc := NewAccountUseCase(&mockAccountRepo{}, testLogger())
+	uc := NewAccountUseCase(&mockAccountRepo{}, &mockCache{}, testLogger())
 
 	_, err := uc.CreateAccount(context.Background(), entity.CURRENCY_UNSPECIFIED)
 	if !errors.Is(err, entity.ErrInvalidCurrency) {
@@ -27,7 +27,7 @@ func TestAccountUseCase_CreateAccount_beginTxError(t *testing.T) {
 		},
 	}
 
-	uc := NewAccountUseCase(repo, testLogger())
+	uc := NewAccountUseCase(repo, &mockCache{}, testLogger())
 
 	_, err := uc.CreateAccount(context.Background(), entity.CURRENCY_USD)
 	if err == nil {
@@ -55,7 +55,7 @@ func TestAccountUseCase_CreateAccount_success(t *testing.T) {
 		},
 	}
 
-	uc := NewAccountUseCase(repo, testLogger())
+	uc := NewAccountUseCase(repo, &mockCache{}, testLogger())
 
 	id, err := uc.CreateAccount(context.Background(), entity.CURRENCY_USD)
 	if err != nil {
@@ -85,7 +85,7 @@ func TestAccountUseCase_GetBalance(t *testing.T) {
 		},
 	}
 
-	uc := NewAccountUseCase(repo, testLogger())
+	uc := NewAccountUseCase(repo, &mockCache{}, testLogger())
 
 	got, err := uc.GetBalance(context.Background(), accountID)
 	if err != nil {
