@@ -45,22 +45,23 @@ func (db *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*en
 	return &tr, nil
 }
 
-func (db *Repository) CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (*entity.Transaction, error) {
-	query := `SELECT id, user_from, user_to, currency, amount, idempotency_key, created_at
+func (db *Repository) CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
+	query := `SELECT id
               FROM ledger.transactions
               WHERE idempotency_key = $1`
 
-	var tr entity.Transaction
+	var trID uuid.UUID
 
-	err := db.pool.QueryRow(ctx, query, key).Scan(&tr.ID, &tr.FromAccountID, &tr.ToAccountID, &tr.Currency, &tr.Amount, &tr.IdempotencyKey, &tr.CreatedAt)
+	// fix: вместо вычитывания всего тела транзакции читаем только id транзакции и возвращаем только его
+	err := db.pool.QueryRow(ctx, query, key).Scan(&trID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, entity.ErrTransactionNotFound
+			return uuid.Nil, entity.ErrTransactionNotFound
 		}
 		db.logger.ErrorContext(ctx, "db: get transaction error", "err", err)
-		return nil, fmt.Errorf("db: check idempotency key error: %w", err)
+		return uuid.Nil, fmt.Errorf("db: check idempotency key error: %w", err)
 	}
-	return &tr, nil
+	return trID, nil
 }
 
 func (db *Repository) BeginTx(ctx context.Context) (entity.CustomTx, error) {
