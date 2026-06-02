@@ -250,8 +250,8 @@ func TestTransferUseCase_Transaction_duplicateCreateReturnsExisting(t *testing.T
 	repo.createTransactionFn = func(context.Context, entity.CustomTx, *entity.Transaction) error {
 		return errors.New("duplicate idempotency key")
 	}
-	repo.checkIdempotencyFn = func(context.Context, uuid.UUID) (*entity.Transaction, error) {
-		return &entity.Transaction{ID: existingID}, nil
+	repo.checkIdempotencyFn = func(context.Context, uuid.UUID) (uuid.UUID, error) {
+		return existingID, nil
 	}
 
 	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), time.Minute, nil)
@@ -302,14 +302,16 @@ func transferRepoWithAccounts(from, to *entity.Account) *mockTransferRepo {
 		getByIDFn: func(_ context.Context, id uuid.UUID) (*entity.Account, error) {
 			return lookup(id)
 		},
-		getForUpdateFn: func(_ context.Context, _ entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
-			if id == from.ID {
-				return from, nil
+		getCurrenciesFn: func(_ context.Context, ids []uuid.UUID) (map[uuid.UUID]entity.Currency, error) {
+			res := make(map[uuid.UUID]entity.Currency)
+			for _, id := range ids {
+				if id == from.ID {
+					res[id] = from.Currency
+				} else if id == to.ID {
+					res[id] = to.Currency
+				}
 			}
-			return nil, entity.ErrAccountNotFound
-		},
-		getInTxFn: func(_ context.Context, _ entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
-			return lookup(id)
+			return res, nil
 		},
 	}
 }
