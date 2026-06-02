@@ -96,3 +96,22 @@ Poisson(currency)  ──┘
         │
         └── metrics :9092/metrics ──► Prometheus ──► Grafana "Load Generator"
 ```
+
+
+P.S. на момент разработки у меня получилось выжать ~3500 RPS до интеграции k8s+kafka при следующих настройках:
+``` 
+USERS_AMOUNT=100000
+VALID_RPS=5000
+INVALID_RPS=100
+INVALID_CURRENCY_RPS=150
+LOAD_DURATION=5m
+LOAD_BOOTSTRAP_WORKERS=50
+LOAD_TX_WORKERS=100
+BOOTSTRAP_MAX_ERROR_PCT=33
+
+```
+
+возможно если поиграться с настройками и в коде и в env, то можно выжать ещё бОльший результат, так что я периодически при каких-то 
+результатах буду обновлять этот раздел
+
+![img.png](img.png)

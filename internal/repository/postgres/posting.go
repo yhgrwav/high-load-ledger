@@ -9,38 +9,62 @@ import (
 )
 
 func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error {
-	t, err := db.castTx(ctx, tx)
+	tr, err := db.castTx(ctx, tx)
 	if err != nil {
 		return err
 	}
 
-	query := `INSERT INTO ledger.postings (transaction_id, account_id, amount)
-			  VALUES($1, $2, $3)
-			  RETURNING id`
+	var query string
+	var args []any
 
-	accountLatest := make(map[uuid.UUID]int64, len(postings))
+	// нашел идеальный вариант реализации этого метода, в общем логика завязывается на длине postings,
+	// т.е. если нам прилетает всего лишь один posting - делаем единичную вставку, если длина 2 - делаем
+	// двойную вставку. Мне к сожалению не хватило мозгов так красиво расписать эту идею в коде, но в целом
+	// 2 промпта всё исправили и я получил буквально то, о чём мечтал в реализации этого метода.
+	// по итогу этот метод является хорошей точкой оптимизации основного метода транзакции, т.к. мы теперь
+	// записываем 2 постинга за один сетевой вызов, а как мне сказал мой опытный знакомый - главная проблема
+	// сложных систем - сетевые задержки, соответственно нужно избегать лишних запросов, соединений и тд.
+	// вообще по сути своей если бы мой проект запускался по канону на разных серверах, в разных уголках планеты
+	// с разным пингом - у меня бы и 200 рпс на один инстанс врядли вышел бы, но пока я буду с нулевой задержкой
+	// пытаться высосать из этого кода хотя бы 600 рпс на локалке, что звучит вполне возможно.
 
-	for _, posting := range postings {
-		var id int64
-		if err := t.QueryRow(ctx, query, posting.TransactionID, posting.AccountID, posting.Amount).Scan(&id); err != nil {
-			db.logger.ErrorContext(ctx, "db: insert posting failed", "err", err)
-			return fmt.Errorf("db: insert posting failed: %w", err)
+	switch len(postings) {
+	case 1:
+		query = `
+			WITH inserted AS (
+				INSERT INTO ledger.postings (transaction_id, account_id, amount)
+				VALUES ($1, $2, $3)
+				RETURNING id, account_id
+			)
+			UPDATE ledger.accounts a
+			SET latest_posting_id = GREATEST(a.latest_posting_id, i.id),
+			    updated_at = CURRENT_TIMESTAMP
+			FROM inserted i
+			WHERE a.user_id = i.account_id`
+		args = []any{postings[0].TransactionID, postings[0].AccountID, postings[0].Amount}
+	case 2:
+		query = `
+			WITH inserted AS (
+				INSERT INTO ledger.postings (transaction_id, account_id, amount)
+				VALUES ($1, $2, $3), ($4, $5, $6)
+				RETURNING id, account_id
+			)
+			UPDATE ledger.accounts a
+			SET latest_posting_id = GREATEST(a.latest_posting_id, i.id),
+			    updated_at = CURRENT_TIMESTAMP
+			FROM inserted i
+			WHERE a.user_id = i.account_id`
+		args = []any{
+			postings[0].TransactionID, postings[0].AccountID, postings[0].Amount,
+			postings[1].TransactionID, postings[1].AccountID, postings[1].Amount,
 		}
-		if id > accountLatest[posting.AccountID] {
-			accountLatest[posting.AccountID] = id
-		}
+	default:
+		return nil
 	}
 
-	updateQuery := `UPDATE ledger.accounts
-	                SET latest_posting_id = GREATEST(latest_posting_id, $1),
-	                    updated_at = CURRENT_TIMESTAMP
-	                WHERE user_id = $2`
-
-	for accountID, latestID := range accountLatest {
-		if _, err := t.Exec(ctx, updateQuery, latestID, accountID); err != nil {
-			db.logger.ErrorContext(ctx, "db: update latest posting id failed", "err", err, "account_id", accountID)
-			return fmt.Errorf("db: update latest posting id failed: %w", err)
-		}
+	if _, err := tr.Exec(ctx, query, args...); err != nil {
+		db.logger.ErrorContext(ctx, "db: create postings failed", "err", err)
+		return fmt.Errorf("db: create postings failed: %w", err)
 	}
 
 	return nil

@@ -9,5 +9,3 @@ DROP TABLE IF EXISTS ledger.transactions;
 DROP TABLE IF EXISTS ledger.accounts;
 
 DROP SCHEMA IF EXISTS ledger CASCADE;
-
-DROP EXTENSION IF EXISTS "uuid-ossp";
