@@ -16,11 +16,14 @@ type Config struct {
 	DBHost                 string        `env:"DB_HOST"`
 	DBPort                 string        `env:"DB_PORT"`
 	DBSSLMode              string        `env:"DB_SSL_MODE"`
+	DBMaxConns             int32         `env:"DB_MAX_CONNS" envDefault:"100"`
+	DBMinConns             int32         `env:"DB_MIN_CONNS" envDefault:"10"`
 	DSN                    string        `env:"DSN"`
 	RedisHost              string        `env:"REDIS_HOST"`
 	RedisPort              string        `env:"REDIS_PORT" envDefault:"6379"`
 	RedisPassword          string        `env:"REDIS_PASSWORD"`
 	RedisDB                int           `env:"REDIS_DB" envDefault:"0"`
+	RedisPoolSize          int           `env:"REDIS_POOL_SIZE" envDefault:"100"`
 	RedisTransactionTTL    time.Duration `env:"REDIS_TRANSACTION_TTL" envDefault:"67m"`
 	GRPCPort               string        `env:"GRPC_PORT" envDefault:"50051"`
 	LogLevel               string        `env:"LOG_LEVEL" envDefault:"info"`
