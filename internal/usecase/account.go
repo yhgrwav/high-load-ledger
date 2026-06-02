@@ -19,12 +19,14 @@ type accountRepo interface {
 
 type AccountUseCase struct {
 	repo   accountRepo
+	cache  repository.CacheRepository
 	logger *slog.Logger
 }
 
-func NewAccountUseCase(repo accountRepo, logger *slog.Logger) *AccountUseCase {
+func NewAccountUseCase(repo accountRepo, cache repository.CacheRepository, logger *slog.Logger) *AccountUseCase {
 	return &AccountUseCase{
 		repo:   repo,
+		cache:  cache,
 		logger: logger,
 	}
 }
@@ -103,6 +105,8 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 	if err = a.repo.CommitTx(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
+
+	_ = a.cache.SetAccountCurrency(ctx, id, currency, 24*time.Hour)
 
 	return id, nil
 }
