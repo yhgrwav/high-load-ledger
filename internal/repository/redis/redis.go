@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"log/slog"
 	"time"
@@ -89,4 +90,29 @@ func (r *cacheRepo) GetIdempotencyKey(ctx context.Context, key uuid.UUID) ([]byt
 		return nil, fmt.Errorf("redis get idempotency: %w", err)
 	}
 	return result, nil
+}
+
+func (r *cacheRepo) SetAccountCurrency(ctx context.Context, accountID uuid.UUID, currency entity.Currency, ttl time.Duration) error {
+	key := fmt.Sprintf("currency:%s", accountID.String())
+
+	err := r.rdb.Set(ctx, key, int(currency), ttl).Err()
+	if err != nil {
+		r.logger.ErrorContext(ctx, "redis set currency error", "err", err, "account_id", accountID)
+		return err
+	}
+	return nil
+}
+
+func (r *cacheRepo) GetAccountCurrency(ctx context.Context, accountID uuid.UUID) (entity.Currency, error) {
+	key := fmt.Sprintf("currency:%s", accountID.String())
+
+	result, err := r.rdb.Get(ctx, key).Int()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return entity.CURRENCY_UNSPECIFIED, nil
+		}
+		r.logger.ErrorContext(ctx, "redis get currency error", "err", err, "account_id", accountID)
+		return entity.CURRENCY_UNSPECIFIED, err
+	}
+	return entity.Currency(result), nil
 }
