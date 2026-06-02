@@ -74,6 +74,7 @@ services:
     image: postgres:18-alpine
     container_name: ledger_postgres
     restart: always
+    command: ["postgres", "-c", "max_connections=500", "-c", "shared_buffers=256MB"]
     environment:
       POSTGRES_USER: ${DB_SUPER_USER}
       POSTGRES_PASSWORD: ${DB_SUPER_PASSWORD}
@@ -160,7 +161,7 @@ services:
       - redis
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.16.0
+    image: prometheuscommunity/postgres-exporter:v0.18.1
     container_name: ledger_postgres_exporter
     restart: unless-stopped
     environment:
