@@ -9,10 +9,8 @@ import (
 
 type AccountRepository interface {
 	CreateAccount(ctx context.Context, tx entity.CustomTx, acc *entity.Account) error
-	GetForUpdate(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*entity.Account, error)
-	GetInTx(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error)
-	UpdateBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, newAmount int64) error
+	GetCurrencies(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]entity.Currency, error)
 	DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
 	CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
 }
