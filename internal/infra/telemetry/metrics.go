@@ -10,6 +10,8 @@ import (
 type Metrics interface {
 	ObserveGRPCRequest(rpc, code string)
 	ObserveGRPCDuration(rpc, code string, seconds float64)
+	ObserveTotalRequests(fullMethod, code string)
+	ObserveResponseTime(fullMethod, code string, seconds float64)
 	RecordTransfer(result string)
 	RecordBalanceCorrection()
 }

@@ -19,12 +19,14 @@ type accountRepo interface {
 
 type AccountUseCase struct {
 	repo   accountRepo
+	cache  repository.CacheRepository
 	logger *slog.Logger
 }
 
-func NewAccountUseCase(repo accountRepo, logger *slog.Logger) *AccountUseCase {
+func NewAccountUseCase(repo accountRepo, cache repository.CacheRepository, logger *slog.Logger) *AccountUseCase {
 	return &AccountUseCase{
 		repo:   repo,
+		cache:  cache,
 		logger: logger,
 	}
 }
@@ -40,7 +42,8 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 		return uuid.Nil, err
 	}
 
-	balance := int64(rand.Int())
+	// генерацию баланса ограничил до миллиона, потому что иначе база падает с ошибкой bigint out of range
+	balance := int64(rand.Int63n(1000000))
 
 	account := &entity.Account{
 		ID:        id,
@@ -71,8 +74,14 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 			return uuid.Nil, err
 		}
 
+		var trxID uuid.UUID
+		trxID, err = uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, err
+		}
+
 		trx := entity.Transaction{
-			ID:             uuid.New(),
+			ID:             trxID,
 			IdempotencyKey: openingKey,
 			FromAccountID:  id,
 			ToAccountID:    id,
@@ -96,6 +105,8 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 	if err = a.repo.CommitTx(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
+
+	_ = a.cache.SetAccountCurrency(ctx, id, currency, 24*time.Hour)
 
 	return id, nil
 }
