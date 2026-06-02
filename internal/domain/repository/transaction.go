@@ -10,7 +10,7 @@ import (
 type TransactionRepository interface {
 	CreateTransaction(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error
 	GetTransactionByID(ctx context.Context, id uuid.UUID) (*entity.Transaction, error)
-	CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (*entity.Transaction, error)
+	CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (uuid.UUID, error)
 
 	BeginTx(ctx context.Context) (entity.CustomTx, error)
 	CommitTx(ctx context.Context, tx entity.CustomTx) error
