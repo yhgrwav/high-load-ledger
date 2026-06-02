@@ -26,29 +26,6 @@ func (db *Repository) CreateAccount(ctx context.Context, tx entity.CustomTx, acc
 	return nil
 }
 
-func (db *Repository) GetForUpdate(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
-	t, err := db.castTx(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at 
-			  FROM ledger.accounts
-			  WHERE user_id = $1
-			  FOR UPDATE`
-	var account entity.Account
-
-	err = t.QueryRow(ctx, query, id).Scan(&account.ID, &account.Balance, &account.Currency, &account.LatestPostingID, &account.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, entity.ErrAccountNotFound
-		}
-		db.logger.ErrorContext(ctx, "db: failed to get account", "err", err, "id", id)
-		return nil, fmt.Errorf("db: failed to get account: %w", err)
-	}
-	return &account, nil
-}
-
 func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Account, error) {
 	query := `select user_id, amount, currency, latest_posting_id, updated_at 
 		  FROM ledger.accounts
@@ -65,46 +42,34 @@ func (db *Repository) GetByID(ctx context.Context, id uuid.UUID) (*entity.Accoun
 	return &account, nil
 }
 
-func (db *Repository) GetInTx(ctx context.Context, tx entity.CustomTx, id uuid.UUID) (*entity.Account, error) {
-	t, err := db.castTx(ctx, tx)
-	if err != nil {
-		return nil, err
+func (db *Repository) GetCurrencies(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]entity.Currency, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
 
-	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at
-			  FROM ledger.accounts
-			  WHERE user_id = $1`
-
-	var account entity.Account
-	err = t.QueryRow(ctx, query, id).Scan(
-		&account.ID, &account.Balance, &account.Currency, &account.LatestPostingID, &account.UpdatedAt,
-	)
+	query := `SELECT user_id, currency FROM ledger.accounts WHERE user_id = ANY($1)`
+	rows, err := db.pool.Query(ctx, query, ids)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, entity.ErrAccountNotFound
+		db.logger.ErrorContext(ctx, "db: failed to get currencies", "err", err)
+		return nil, fmt.Errorf("db: failed to get currencies: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[uuid.UUID]entity.Currency, len(ids))
+	for rows.Next() {
+		var id uuid.UUID
+		var currency entity.Currency
+		if err := rows.Scan(&id, &currency); err != nil {
+			db.logger.ErrorContext(ctx, "db: scan currency failed", "err", err)
+			return nil, fmt.Errorf("db: scan currency failed: %w", err)
 		}
-		db.logger.ErrorContext(ctx, "db: failed to get account in tx", "err", err, "id", id)
-		return nil, fmt.Errorf("db: failed to get account in tx: %w", err)
+		result[id] = currency
 	}
-	return &account, nil
-}
-
-func (db *Repository) UpdateBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
-
-	t, err := db.castTx(ctx, tx)
-	if err != nil {
-		return err
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: rows scan currency failed: %w", err)
 	}
 
-	query := `UPDATE ledger.accounts
-              SET amount = $1, updated_at = CURRENT_TIMESTAMP
-              WHERE user_id = $2`
-	_, err = t.Exec(ctx, query, amount, id)
-	if err != nil {
-		db.logger.ErrorContext(ctx, "db: failed to update balance", "err", err, "id", id)
-		return fmt.Errorf("db: failed to update balance: %w", err)
-	}
-	return nil
+	return result, nil
 }
 
 func (db *Repository) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
