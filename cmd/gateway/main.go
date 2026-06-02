@@ -73,13 +73,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// захардкодил пока настройки, думаю всё равно никто не захочет больше одного раза запускать это приложение с разными настройками, а мне в 10 раз меньше
-	// надо будет писать мусорного кода, который не будет нести в себе никакого смысла кроме "идиоматичности"
-	// здесь я просто дал возможность базе обрабатывать больше соединений, что является максимально простым способом
-	// увеличить пропускную способность, затем уже в бой полетят более сложные приёмы.
-
-	poolCfg.MaxConns = 200
-	poolCfg.MinConns = 20
+	poolCfg.MaxConns = cfg.DBMaxConns
+	poolCfg.MinConns = cfg.DBMinConns
 	poolCfg.MaxConnLifetime = 30 * time.Minute
 	poolCfg.MaxConnIdleTime = 5 * time.Minute
 	poolCfg.HealthCheckPeriod = 30 * time.Second
@@ -100,7 +95,7 @@ func main() {
 		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
-		PoolSize: 200,
+		PoolSize: cfg.RedisPoolSize,
 	})
 	defer rdb.Close()
 
