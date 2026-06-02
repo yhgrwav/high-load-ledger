@@ -55,6 +55,7 @@ func main() {
 
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(tel.Metrics)),
+		grpc.MaxConcurrentStreams(1000),
 	)
 
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -77,8 +78,8 @@ func main() {
 	// здесь я просто дал возможность базе обрабатывать больше соединений, что является максимально простым способом
 	// увеличить пропускную способность, затем уже в бой полетят более сложные приёмы.
 
-	poolCfg.MaxConns = 32
-	poolCfg.MinConns = 8
+	poolCfg.MaxConns = 200
+	poolCfg.MinConns = 20
 	poolCfg.MaxConnLifetime = 30 * time.Minute
 	poolCfg.MaxConnIdleTime = 5 * time.Minute
 	poolCfg.HealthCheckPeriod = 30 * time.Second
@@ -99,6 +100,7 @@ func main() {
 		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+		PoolSize: 200,
 	})
 	defer rdb.Close()
 
@@ -112,7 +114,7 @@ func main() {
 	cacheRepo := redisRepo.NewCacheRepository(rdb, lgr)
 
 	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, cfg.RedisTransactionTTL, tel.Metrics)
-	accountUC := usecase.NewAccountUseCase(repo, lgr)
+	accountUC := usecase.NewAccountUseCase(repo, cacheRepo, lgr)
 
 	handler := transport.NewHandler(transferUC, accountUC, lgr)
 
