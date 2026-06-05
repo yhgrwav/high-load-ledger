@@ -18,7 +18,7 @@ type Observability struct {
 	server  *http.Server
 }
 
-func New(cfg *config.Config, logger slog.Logger) *Observability {
+func New(cfg config.Telemetry, logger slog.Logger) *Observability {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 
