@@ -11,10 +11,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// дефолты для валидации
 const (
-	defaultBatchSize       = 100
-	defaultBackoff         = 5 * time.Second
-	maxBalanceVersionSteps = 8
+	defaultPostingBatchSize = 100
+	defaultBackoff          = 5 * time.Second
+	maxBalanceVersionSteps  = 8
 )
 
 type postingWorkerRepo interface {
@@ -44,21 +45,12 @@ type PostingWorker struct {
 	backoffTime time.Duration
 }
 
-func NewPostingWorker(
-	repo postingWorkerRepo,
-	pool postingWorkerPool,
-	cursor postingCursorStore,
-	logger *slog.Logger,
-	metrics *telemetry.PrometheusMetrics,
-	workerName string,
-	batchSize int,
-	backoff time.Duration,
-) (*PostingWorker, error) {
+func NewPostingWorker(repo postingWorkerRepo, pool postingWorkerPool, cursor postingCursorStore, logger *slog.Logger, metrics *telemetry.PrometheusMetrics, workerName string, batchSize int, backoff time.Duration) (*PostingWorker, error) {
 	if workerName == "" {
 		return nil, fmt.Errorf("posting worker: worker name is required")
 	}
 	if batchSize <= 0 {
-		batchSize = defaultBatchSize
+		batchSize = defaultPostingBatchSize
 	}
 	if backoff <= 0 {
 		backoff = defaultBackoff
