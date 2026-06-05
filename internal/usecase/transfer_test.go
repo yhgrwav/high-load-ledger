@@ -13,7 +13,7 @@ import (
 )
 
 func TestTransferUseCase_validateRequest(t *testing.T) {
-	uc := NewTransferUseCase(&mockTransferRepo{}, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(&mockTransferRepo{}, &mockCache{}, testLogger(), 0, nil, nil)
 
 	fromID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	toID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
@@ -99,7 +99,7 @@ func TestTransferUseCase_Transaction_idempotencyCacheHit(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, cache, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, cache, testLogger(), 0, nil, nil)
 
 	fromID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	toID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
@@ -137,7 +137,7 @@ func TestTransferUseCase_Transaction_insufficientFunds(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	_, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -169,7 +169,7 @@ func TestTransferUseCase_Transaction_currencyMismatch(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	_, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -230,7 +230,7 @@ func TestTransferUseCase_Transaction_success(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, cache, testLogger(), time.Minute, nil)
+	uc := NewTransferUseCase(repo, cache, testLogger(), time.Minute, nil, nil)
 
 	got, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -284,7 +284,7 @@ func TestTransferUseCase_Transaction_duplicateCreateReturnsExisting(t *testing.T
 		},
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), time.Minute, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), time.Minute, nil, nil)
 
 	got, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -314,7 +314,7 @@ func TestTransferUseCase_loadTransferAccounts_lockOrder(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	fromAcc, toAcc, err := uc.loadTransferAccounts(context.Background(), mockTx{}, secondID, firstID)
 	if err != nil {

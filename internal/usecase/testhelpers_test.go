@@ -38,9 +38,17 @@ func (m *mockCache) SetIdempotencyKey(ctx context.Context, key uuid.UUID, respon
 	return nil
 }
 
-func (m *mockCache) SetBalance(context.Context, uuid.UUID, int64, time.Duration) error   { return nil }
-func (m *mockCache) GetBalance(context.Context, uuid.UUID) (int64, error)               { return 0, nil }
-func (m *mockCache) DeleteBalance(context.Context, uuid.UUID) error                       { return nil }
+func (m *mockCache) SetBalance(context.Context, uuid.UUID, int64, time.Duration) error { return nil }
+func (m *mockCache) GetBalance(context.Context, uuid.UUID) (int64, error)              { return 0, nil }
+func (m *mockCache) DeleteBalance(context.Context, uuid.UUID) error                    { return nil }
+
+func (m *mockCache) SetTransaction(context.Context, *entity.Transaction, time.Duration) error {
+	return nil
+}
+
+func (m *mockCache) GetTransaction(context.Context, uuid.UUID) (*entity.Transaction, error) {
+	return nil, nil
+}
 
 type mockTransferRepo struct {
 	beginTxFn            func(ctx context.Context) (entity.CustomTx, error)
@@ -117,7 +125,9 @@ func (m *mockTransferRepo) GetTransactionByID(ctx context.Context, id uuid.UUID)
 	return nil, entity.ErrTransactionNotFound
 }
 
-func (m *mockTransferRepo) CreateAccount(context.Context, entity.CustomTx, *entity.Account) error { return nil }
+func (m *mockTransferRepo) CreateAccount(context.Context, entity.CustomTx, *entity.Account) error {
+	return nil
+}
 func (m *mockTransferRepo) GetByID(context.Context, uuid.UUID) (*entity.Account, error) {
 	return nil, entity.ErrAccountNotFound
 }
@@ -252,8 +262,8 @@ func (m *mockPostingWorkerPool) ReadWrite(ctx context.Context, fn func(ctx conte
 }
 
 type mockPostingCursor struct {
-	getCursorPositionFn   func(ctx context.Context, workerName string, batchSize int) (int64, int64, error)
-	getActiveAccountsFn   func(ctx context.Context, lastCheckedID, maxID int64) ([]uuid.UUID, error)
+	getCursorPositionFn    func(ctx context.Context, workerName string, batchSize int) (int64, int64, error)
+	getActiveAccountsFn    func(ctx context.Context, lastCheckedID, maxID int64) ([]uuid.UUID, error)
 	updateCursorPositionFn func(ctx context.Context, workerName string, position int64) error
 }
 
@@ -289,9 +299,9 @@ func (m *mockStatsRepo) GetTransactionByID(ctx context.Context, id uuid.UUID) (*
 	return nil, entity.ErrTransactionNotFound
 }
 
-func (m *mockStatsRepo) BeginTx(context.Context) (entity.CustomTx, error)         { return mockTx{}, nil }
-func (m *mockStatsRepo) CommitTx(context.Context, entity.CustomTx) error          { return nil }
-func (m *mockStatsRepo) RollbackTx(context.Context, entity.CustomTx) error        { return nil }
+func (m *mockStatsRepo) BeginTx(context.Context) (entity.CustomTx, error)  { return mockTx{}, nil }
+func (m *mockStatsRepo) CommitTx(context.Context, entity.CustomTx) error   { return nil }
+func (m *mockStatsRepo) RollbackTx(context.Context, entity.CustomTx) error { return nil }
 func (m *mockStatsRepo) CreateTransaction(context.Context, entity.CustomTx, *entity.Transaction) error {
 	return nil
 }
