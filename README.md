@@ -2,7 +2,7 @@
 
 Ядро платёжной системы на Go: gRPC API, идемпотентные переводы (Redis + PostgreSQL), фоновая сверка балансов.
 
-**Стек:** Go · gRPC · Protobuf · PostgreSQL · Redis · Docker · Prometheus · Grafana
+**Стек:** Go · gRPC · Protobuf · PostgreSQL 18 · Redis · Kafka · Docker · Prometheus · Grafana
 
 ---
 
@@ -56,8 +56,9 @@ docker compose down
 | gRPC (load balancer) | `localhost:8085` | **Основная точка входа** (nginx → N × gateway) |
 | Prometheus UI | `http://localhost:19090` | |
 | Grafana | `http://localhost:3000` | login: `admin` / `admin` |
-| PostgreSQL | `localhost:5433` | |
-| Redis | `localhost:6379` | |
+| PostgreSQL | `localhost:5433` | PostgreSQL 18 |
+| Redis | `localhost:6379` | идемпотентность, кэш транзакций |
+| Kafka | `localhost:9092` | события `completed_transactions` |
 
 Метрики gateway (`/metrics`) доступны внутри Docker-сети; Prometheus собирает их со всех реплик через DNS service discovery.
 
@@ -173,14 +174,39 @@ make gen                            # protobuf (нужен protoc)
 Структура:
 
 ```
-cmd/gateway/       — gRPC API
+cmd/gateway/       — gRPC API (+ Kafka producer)
 cmd/worker/        — PostingWorker (один инстанс)
+cmd/stats/         — Kafka consumer → Redis-кэш для GetTransaction
 cmd/loadgen/       — нагрузочный генератор
 api/ledger/        — protobuf
 internal/          — domain, usecase, repository, transport
 migrations/        — SQL
-docker/            — prometheus, grafana
+docker/            — prometheus, grafana, worker, stats, loadgen
 ```
+
+---
+
+## Документация
+
+| Документ | Описание |
+|----------|----------|
+| [docs/TASK.md](docs/TASK.md) | Техническое задание и чеклист этапов |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | Контекст для продолжения: loadgen, Kafka, K8s |
+| [docs/DATABASE_README.md](docs/DATABASE_README.md) | PostgreSQL: миграции, пользователи, ограничения |
+| [docs/kafka.md](docs/kafka.md) | Заметки по интеграции Kafka |
+| [docs/AI.md](docs/AI.md) | Подход к использованию ИИ в проекте |
+| [docs/THOUGHTS.md](docs/THOUGHTS.md) | Инженерный дневник разработки |
+| [loadgen/README.md](loadgen/README.md) | Нагрузочный генератор: poisson RPS, метрики, `.env` |
+
+### Прочее
+
+| Ресурс | Описание |
+|--------|----------|
+| [`.env.example`](.env.example) | Все переменные окружения (БД, Redis, Kafka, loadgen) |
+| [`api/ledger/ledger.proto`](api/ledger/ledger.proto) | gRPC-контракт |
+| [`docker-compose.yaml`](docker-compose.yaml) | Полный стек: gateway, workers, observability |
+| [`nginx.conf`](nginx.conf) | gRPC load balancing (`least_conn`) |
+| [LICENSE](LICENSE) | Лицензия |
 
 ---
 
@@ -191,14 +217,8 @@ docker/            — prometheus, grafana
 - [x] PostingWorker (верификация балансов)
 - [x] Prometheus + Grafana, nginx + scale gateway
 - [x] Unit-тесты usecase
-- [ ] Load generator (`loadgen/`)
+- [x] Load generator (`loadgen/`)
+- [x] Kafka (side-effects → `stats-worker` → Redis)
 - [ ] Integration tests
-- [ ] Kafka, Kubernetes
+- [ ] Kubernetes
 - [ ] OpenTelemetry, шардирование PostgreSQL
-
----
-
-## Ещё
-
-- [TASK.md](TASK.md) — техническое задание
-- [THOUGHTS.md](THOUGHTS.md) — инженерный дневник разработки
