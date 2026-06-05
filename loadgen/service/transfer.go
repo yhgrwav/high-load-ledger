@@ -44,3 +44,11 @@ func (t *TxManager) CreateTx(ctx context.Context, currency gen.Currency, userFro
 
 	return txID, nil
 }
+
+func (t *TxManager) GetTransaction(ctx context.Context, txID uuid.UUID) error {
+	req := &gen.GetTransactionRequest{
+		TransactionId: txID[:],
+	}
+	_, err := gen.NewStatsServiceClient(t.conn).GetTransaction(ctx, req)
+	return err
+}
