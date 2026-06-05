@@ -13,13 +13,20 @@ type Handler struct {
 	ledger.UnimplementedStatsServiceServer
 	transferUC *usecase.TransferUseCase
 	accountUC  *usecase.AccountUseCase
+	statsUC    *usecase.StatsUseCase
 	logger     *slog.Logger
 }
 
-func NewHandler(transferUC *usecase.TransferUseCase, accountUC *usecase.AccountUseCase, logger *slog.Logger) *Handler {
+func NewHandler(
+	transferUC *usecase.TransferUseCase,
+	accountUC *usecase.AccountUseCase,
+	statsUC *usecase.StatsUseCase,
+	logger *slog.Logger,
+) *Handler {
 	return &Handler{
 		transferUC: transferUC,
 		accountUC:  accountUC,
+		statsUC:    statsUC,
 		logger:     logger,
 	}
 }
