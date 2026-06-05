@@ -17,6 +17,7 @@ const (
 	StreamValid           = "valid"
 	StreamInvalidBalance  = "invalid_balance"
 	StreamInvalidCurrency = "invalid_currency"
+	StreamStats           = "stats"
 
 	outcomeOK    = "ok"
 	outcomeError = "error"
