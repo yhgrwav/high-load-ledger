@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -32,7 +33,11 @@ func (h *Handler) GetBalance(ctx context.Context, req *ledger.GetBalanceRequest)
 
 	account, err := h.accountUC.GetBalance(ctx, accountID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "get balance failed", "error", err)
+		if errors.Is(err, entity.ErrAccountNotFound) {
+			h.logger.ErrorContext(ctx, "account not found", "error", err, "account_id", accountID)
+			return nil, status.Error(codes.NotFound, "account not found")
+		}
+		h.logger.ErrorContext(ctx, "get balance failed", "error", err, "account_id", accountID)
 		return nil, status.Errorf(codes.Internal, "get balance failed: %v", err)
 	}
 
