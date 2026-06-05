@@ -40,7 +40,7 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 		return uuid.Nil, err
 	}
 
-	balance := int64(rand.Int())
+	balance := int64(rand.Intn(100000000))
 
 	account := &entity.Account{
 		ID:        id,
