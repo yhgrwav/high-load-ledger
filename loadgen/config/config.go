@@ -12,6 +12,7 @@ type Config struct {
 	ValidRPS           float64       `env:"VALID_RPS" envDefault:"100"`
 	InvalidRPS         float64       `env:"INVALID_RPS" envDefault:"10"`
 	InvalidCurrencyRPS float64       `env:"INVALID_CURRENCY_RPS" envDefault:"5"`
+	StatsRPS           float64       `env:"STATS_RPS" envDefault:"50"`
 	LoadDuration       time.Duration `env:"LOAD_DURATION" envDefault:"0"`
 	BootstrapWorkers   int           `env:"LOAD_BOOTSTRAP_WORKERS" envDefault:"50"`
 	TxWorkers          int           `env:"LOAD_TX_WORKERS" envDefault:"100"`
