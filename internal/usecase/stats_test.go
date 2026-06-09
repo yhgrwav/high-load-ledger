@@ -24,7 +24,7 @@ func TestStatsUseCase_GetTransaction_success(t *testing.T) {
 		},
 	}
 
-	uc := NewStatsUseCase(repo, testLogger())
+	uc := NewStatsUseCase(repo, &mockCache{}, testLogger())
 
 	got, err := uc.GetTransaction(context.Background(), txID)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestStatsUseCase_GetTransaction_success(t *testing.T) {
 }
 
 func TestStatsUseCase_GetTransaction_notFound(t *testing.T) {
-	uc := NewStatsUseCase(&mockStatsRepo{}, testLogger())
+	uc := NewStatsUseCase(&mockStatsRepo{}, &mockCache{}, testLogger())
 
 	_, err := uc.GetTransaction(context.Background(), uuid.New())
 	if !errors.Is(err, entity.ErrTransactionNotFound) {

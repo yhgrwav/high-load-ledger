@@ -41,11 +41,13 @@ func (m *mockCache) SetIdempotencyKey(ctx context.Context, key uuid.UUID, respon
 func (m *mockCache) SetBalance(context.Context, uuid.UUID, int64, time.Duration) error { return nil }
 func (m *mockCache) GetBalance(context.Context, uuid.UUID) (int64, error)              { return 0, nil }
 func (m *mockCache) DeleteBalance(context.Context, uuid.UUID) error                    { return nil }
-func (m *mockCache) SetAccountCurrency(context.Context, uuid.UUID, entity.Currency, time.Duration) error {
+
+func (m *mockCache) SetTransaction(context.Context, *entity.Transaction, time.Duration) error {
 	return nil
 }
-func (m *mockCache) GetAccountCurrency(context.Context, uuid.UUID) (entity.Currency, error) {
-	return entity.CURRENCY_UNSPECIFIED, nil
+
+func (m *mockCache) GetTransaction(context.Context, uuid.UUID) (*entity.Transaction, error) {
+	return nil, nil
 }
 
 type mockTransferRepo struct {
@@ -141,6 +143,9 @@ func (m *mockTransferRepo) GetTransactionByID(ctx context.Context, id uuid.UUID)
 
 func (m *mockTransferRepo) CreateAccount(context.Context, entity.CustomTx, *entity.Account) error {
 	return nil
+}
+func (m *mockTransferRepo) GetByID(context.Context, uuid.UUID) (*entity.Account, error) {
+	return nil, entity.ErrAccountNotFound
 }
 
 func (m *mockTransferRepo) ListPostingsByAccountID(context.Context, uuid.UUID, int, int) ([]entity.Posting, error) {

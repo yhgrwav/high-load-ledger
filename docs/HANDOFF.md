@@ -1,6 +1,21 @@
 # Handoff: loadgen + Kafka/K8s
 
-Контекст для продолжения разработки. Unit-тесты usecase написаны с помощью **Composer (Cursor AI)**.
+> Контекст для продолжения разработки. Unit-тесты usecase написаны с помощью **Composer (Cursor AI)**.
+
+---
+
+## Актуальный статус *(июнь 2026)*
+
+| Этап | Статус |
+|------|--------|
+| Unit-тесты usecase | ✅ готово |
+| Loadgen (`cmd/loadgen/`) | ✅ готово — poisson-потоки, метрики, compose-сервис |
+| Kafka (side-effects) | ✅ готово — producer в gateway, `stats-worker` → Redis-кэш |
+| nginx + scale gateway | ✅ готово |
+| PostgreSQL 18 | ✅ `postgres:18-alpine`, volume `/var/lib/postgresql` |
+| Kubernetes | ⏳ следующий шаг |
+
+---
 
 ## Рекомендуемый порядок работ
 
@@ -17,6 +32,7 @@
 **Структура:** `cmd/loadgen/main.go` — отдельный процесс, не часть gateway.
 
 **Минимальный функционал:**
+
 - флаги: `-target` (nginx `localhost:8085`), `-rps`, `-duration`, `-workers`
 - сценарий: CreateAccount → pool аккаунтов → цикл Transfer + GetBalance
 - **уникальный `idempotency_key` на каждый transfer** (UUID v4/v7)
@@ -56,7 +72,7 @@
 
 5. **K8s** — readiness = Postgres + Redis ping; `terminationGracePeriodSeconds` ≥ graceful shutdown gateway + worker cursor flush.
 
-6. **Outbox** — publish в Kafka в той же tx, что transfer (transactional outbox).
+6. **Kafka / stats** — на твоей стороне: событие после transfer, consumer, `GetTransaction`; опционально кэш транзакции в Redis на hot path.
 
 ### План фаз
 

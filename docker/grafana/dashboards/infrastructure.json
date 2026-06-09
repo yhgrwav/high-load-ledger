@@ -17,13 +17,13 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "nginx_connections_active{job=\"nginx\"}",
+          "expr": "nginx_connections_active",
           "legendFormat": "active"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "nginx_connections_waiting{job=\"nginx\"}",
+          "expr": "nginx_connections_waiting",
           "legendFormat": "waiting"
         }
       ]
@@ -38,7 +38,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(nginx_connections_accepted{job=\"nginx\"}[1m])",
+          "expr": "rate(nginx_connections_accepted[1m])",
           "legendFormat": "accepted/s"
         }
       ]
@@ -53,7 +53,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(nginx_http_requests_total{job=\"nginx\"}[1m])",
+          "expr": "rate(nginx_http_requests_total[1m])",
           "legendFormat": "requests/s"
         }
       ]
@@ -151,7 +151,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "redis_connected_clients{job=\"redis\"}",
+          "expr": "redis_connected_clients",
           "legendFormat": "clients"
         }
       ]
@@ -166,7 +166,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(redis_commands_processed_total{job=\"redis\"}[1m])",
+          "expr": "rate(redis_commands_processed_total[1m])",
           "legendFormat": "commands/s"
         }
       ]
@@ -181,7 +181,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "redis_memory_used_bytes{job=\"redis\"}",
+          "expr": "redis_memory_used_bytes",
           "legendFormat": "used"
         }
       ]

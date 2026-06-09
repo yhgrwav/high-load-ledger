@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"high-load-ledger/internal/domain/entity"
 )
 
 type CacheRepository interface {
@@ -16,6 +18,6 @@ type CacheRepository interface {
 	GetBalance(ctx context.Context, accountID uuid.UUID) (int64, error)
 	DeleteBalance(ctx context.Context, accountID uuid.UUID) error
 
-	SetAccountCurrency(ctx context.Context, accountID uuid.UUID, currency entity.Currency, ttl time.Duration) error
-	GetAccountCurrency(ctx context.Context, accountID uuid.UUID) (entity.Currency, error)
+	SetTransaction(ctx context.Context, tx *entity.Transaction, ttl time.Duration) error
+	GetTransaction(ctx context.Context, id uuid.UUID) (*entity.Transaction, error)
 }
