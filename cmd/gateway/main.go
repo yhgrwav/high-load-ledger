@@ -119,7 +119,7 @@ func main() {
 	producer := kafkainfra.NewProducer(kafkaWriter, lgr)
 
 	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, redisCfg.TransactionTTL, tel.Metrics, producer)
-	accountUC := usecase.NewAccountUseCase(repo, lgr)
+	accountUC := usecase.NewAccountUseCase(repo, cacheRepo, lgr)
 	statsUC := usecase.NewStatsUseCase(repo, cacheRepo, lgr)
 
 	handler := transport.NewHandler(transferUC, accountUC, statsUC, lgr)
