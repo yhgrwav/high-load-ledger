@@ -14,8 +14,6 @@ type Metrics interface {
 	ObserveResponseTime(fullMethod, code string, seconds float64)
 	RecordTransfer(result string)
 	RecordBalanceCorrection()
-	ObserveTotalRequests(fullMethod, code string)
-	ObserveResponseTime(fullMethod, code string, duration float64)
 }
 
 type PrometheusMetrics struct {
