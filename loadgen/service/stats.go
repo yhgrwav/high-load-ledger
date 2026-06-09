@@ -15,12 +15,14 @@ type LoadStats struct {
 	dispatchedValid           atomic.Int64
 	dispatchedInvalidBalance  atomic.Int64
 	dispatchedInvalidCurrency atomic.Int64
+	dispatchedStats           atomic.Int64
 	completedOK               atomic.Int64
 	completedError            atomic.Int64
 
 	lastDispatchedValid           atomic.Int64
 	lastDispatchedInvalidBalance  atomic.Int64
 	lastDispatchedInvalidCurrency atomic.Int64
+	lastDispatchedStats           atomic.Int64
 	lastTick                      atomic.Int64
 }
 
@@ -32,6 +34,8 @@ func (s *LoadStats) RecordDispatched(kind string) {
 		s.dispatchedInvalidBalance.Add(1)
 	case StreamInvalidCurrency:
 		s.dispatchedInvalidCurrency.Add(1)
+	case StreamStats:
+		s.dispatchedStats.Add(1)
 	}
 }
 
@@ -53,19 +57,20 @@ func (s *LoadStats) RunReporter(ctx context.Context, cfg *loadgenconfig.Config) 
 			s.logFinal(cfg)
 			return
 		case <-ticker.C:
-			rValid, rInvalid, rCurrency := s.rates()
+			rValid, rInvalid, rCurrency, rStats := s.rates()
 			log.Printf(
-				"loadgen: dispatch rate valid=%.1f/s (target %.0f) invalid_balance=%.1f/s (target %.0f) invalid_currency=%.1f/s (target %.0f) completed_ok=%d completed_error=%d",
+				"loadgen: dispatch rate valid=%.1f/s (target %.0f) invalid_balance=%.1f/s (target %.0f) invalid_currency=%.1f/s (target %.0f) stats=%.1f/s (target %.0f) completed_ok=%d completed_error=%d",
 				rValid, cfg.ValidRPS,
 				rInvalid, cfg.InvalidRPS,
 				rCurrency, cfg.InvalidCurrencyRPS,
+				rStats, cfg.StatsRPS,
 				s.completedOK.Load(), s.completedError.Load(),
 			)
 		}
 	}
 }
 
-func (s *LoadStats) rates() (valid, invalidBalance, invalidCurrency float64) {
+func (s *LoadStats) rates() (valid, invalidBalance, invalidCurrency, stats float64) {
 	now := time.Now().UnixNano()
 	prev := s.lastTick.Load()
 	if prev == 0 {
@@ -73,35 +78,39 @@ func (s *LoadStats) rates() (valid, invalidBalance, invalidCurrency float64) {
 		s.lastDispatchedValid.Store(s.dispatchedValid.Load())
 		s.lastDispatchedInvalidBalance.Store(s.dispatchedInvalidBalance.Load())
 		s.lastDispatchedInvalidCurrency.Store(s.dispatchedInvalidCurrency.Load())
-		return 0, 0, 0
+		s.lastDispatchedStats.Store(s.dispatchedStats.Load())
+		return 0, 0, 0, 0
 	}
 
 	elapsed := float64(now-prev) / float64(time.Second)
 	if elapsed <= 0 {
-		return 0, 0, 0
+		return 0, 0, 0, 0
 	}
 
 	curValid := s.dispatchedValid.Load()
 	curInvalid := s.dispatchedInvalidBalance.Load()
 	curCurrency := s.dispatchedInvalidCurrency.Load()
+	curStats := s.dispatchedStats.Load()
 
 	valid = float64(curValid-s.lastDispatchedValid.Load()) / elapsed
 	invalidBalance = float64(curInvalid-s.lastDispatchedInvalidBalance.Load()) / elapsed
 	invalidCurrency = float64(curCurrency-s.lastDispatchedInvalidCurrency.Load()) / elapsed
+	stats = float64(curStats-s.lastDispatchedStats.Load()) / elapsed
 
 	s.lastTick.Store(now)
 	s.lastDispatchedValid.Store(curValid)
 	s.lastDispatchedInvalidBalance.Store(curInvalid)
 	s.lastDispatchedInvalidCurrency.Store(curCurrency)
+	s.lastDispatchedStats.Store(curStats)
 
-	return valid, invalidBalance, invalidCurrency
+	return valid, invalidBalance, invalidCurrency, stats
 }
 
 func (s *LoadStats) logFinal(cfg *loadgenconfig.Config) {
-	rValid, rInvalid, rCurrency := s.rates()
+	rValid, rInvalid, rCurrency, rStats := s.rates()
 	log.Printf(
-		"loadgen final: dispatch valid=%.1f/s invalid_balance=%.1f/s invalid_currency=%.1f/s completed_ok=%d completed_error=%d",
-		rValid, rInvalid, rCurrency, s.completedOK.Load(), s.completedError.Load(),
+		"loadgen final: dispatch valid=%.1f/s invalid_balance=%.1f/s invalid_currency=%.1f/s stats=%.1f/s completed_ok=%d completed_error=%d",
+		rValid, rInvalid, rCurrency, rStats, s.completedOK.Load(), s.completedError.Load(),
 	)
 
 	checks := []struct {
@@ -112,6 +121,7 @@ func (s *LoadStats) logFinal(cfg *loadgenconfig.Config) {
 		{StreamValid, cfg.ValidRPS, rValid},
 		{StreamInvalidBalance, cfg.InvalidRPS, rInvalid},
 		{StreamInvalidCurrency, cfg.InvalidCurrencyRPS, rCurrency},
+		{StreamStats, cfg.StatsRPS, rStats},
 	}
 
 	passed := true

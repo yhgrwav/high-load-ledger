@@ -40,8 +40,8 @@ func TestNewPostingWorker_defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPostingWorker() error = %v", err)
 	}
-	if w.batchSize != defaultBatchSize {
-		t.Fatalf("batchSize = %d, want %d", w.batchSize, defaultBatchSize)
+	if w.batchSize != defaultPostingBatchSize {
+		t.Fatalf("batchSize = %d, want %d", w.batchSize, defaultPostingBatchSize)
 	}
 	if w.backoffTime != defaultBackoff {
 		t.Fatalf("backoffTime = %v, want %v", w.backoffTime, defaultBackoff)

@@ -5,10 +5,30 @@ import (
 	"os"
 )
 
-func New(logLevel string, addSource, isJSON bool) *slog.Logger {
+func New(env, logLevel string, addSource, isJSON *bool) *slog.Logger {
 	var lvl slog.Level
 
-	switch logLevel {
+	finalLogLevel := "info"
+	finalIsJSON := true
+	finalAddSource := false
+
+	if env == "development" {
+		finalLogLevel = "debug"
+		finalIsJSON = false
+		finalAddSource = true
+	}
+
+	if logLevel != "" {
+		finalLogLevel = logLevel
+	}
+	if isJSON != nil {
+		finalIsJSON = *isJSON
+	}
+	if addSource != nil {
+		finalAddSource = *addSource
+	}
+
+	switch finalLogLevel {
 	case "debug":
 		lvl = slog.LevelDebug
 	case "info":
@@ -22,11 +42,11 @@ func New(logLevel string, addSource, isJSON bool) *slog.Logger {
 	}
 
 	opts := &slog.HandlerOptions{
-		AddSource: addSource,
+		AddSource: finalAddSource,
 		Level:     slog.Leveler(lvl),
 	}
 	var handler slog.Handler
-	if isJSON == true {
+	if finalIsJSON {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
 		handler = slog.NewTextHandler(os.Stdout, opts)

@@ -8,24 +8,30 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	gen "high-load-ledger/gen/go"
 	loadgenconfig "high-load-ledger/loadgen/config"
 )
 
 type CoreService struct {
-	cfg     *loadgenconfig.Config
-	tx      *TxManager
-	acc     *AccountService
-	stats   *LoadStats
-	metrics *Metrics
+	cfg         *loadgenconfig.Config
+	tx          *TxManager
+	acc         *AccountService
+	stats       *LoadStats
+	metrics     *Metrics
+	recentTxIDs []uuid.UUID
+	txIDsMu     sync.RWMutex
 }
 
 func NewCoreService(cfg *loadgenconfig.Config, tx *TxManager, acc *AccountService, metrics *Metrics) *CoreService {
 	return &CoreService{
-		cfg:     cfg,
-		tx:      tx,
-		acc:     acc,
-		stats:   &LoadStats{},
-		metrics: metrics,
+		cfg:         cfg,
+		tx:          tx,
+		acc:         acc,
+		stats:       &LoadStats{},
+		metrics:     metrics,
+		recentTxIDs: make([]uuid.UUID, 0, 10000),
 	}
 }
 
@@ -38,6 +44,7 @@ func (c *CoreService) LoadGenWorker(ctx context.Context) {
 	c.metrics.SetTarget(StreamValid, c.cfg.ValidRPS)
 	c.metrics.SetTarget(StreamInvalidBalance, c.cfg.InvalidRPS)
 	c.metrics.SetTarget(StreamInvalidCurrency, c.cfg.InvalidCurrencyRPS)
+	c.metrics.SetTarget(StreamStats, c.cfg.StatsRPS)
 
 	log.Println("loadgen: started")
 	defer log.Println("loadgen: finished")
@@ -77,6 +84,23 @@ func (c *CoreService) bootstrapAccounts(ctx context.Context) (AccountPool, error
 		perCurrency = 1
 	}
 
+	log.Println("loadgen: waiting for upstream to be ready...")
+	client := gen.NewAccountServiceClient(c.acc.conn)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		_, err := client.CreateAccount(ctx, &gen.CreateAccountRequest{Currency: currencies[0]})
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	log.Println("loadgen: upstream is ready, starting bootstrap")
+
 	for _, curr := range currencies {
 		accounts, err := c.acc.CreateAccounts(ctx, curr, perCurrency, c.cfg.BootstrapMaxError)
 		if err != nil {
@@ -106,9 +130,24 @@ func (c *CoreService) runLoad(ctx context.Context, pool AccountPool) {
 		go func() {
 			defer workersWg.Done()
 			for job := range jobs {
-				_, err := c.tx.CreateTx(ctx, job.Currency, job.From, job.To, job.Amount)
-				c.stats.RecordCompleted(err)
-				c.metrics.RecordCompleted(job.Kind, err)
+				if job.Kind == StreamStats {
+					err := c.tx.GetTransaction(ctx, job.TxID)
+					c.stats.RecordCompleted(err)
+					c.metrics.RecordCompleted(job.Kind, err)
+				} else {
+					txID, err := c.tx.CreateTx(ctx, job.Currency, job.From, job.To, job.Amount)
+					c.stats.RecordCompleted(err)
+					c.metrics.RecordCompleted(job.Kind, err)
+
+					if job.Kind == StreamValid && err == nil && txID != uuid.Nil {
+						c.txIDsMu.Lock()
+						c.recentTxIDs = append(c.recentTxIDs, txID)
+						if len(c.recentTxIDs) > 10000 {
+							c.recentTxIDs = c.recentTxIDs[1000:]
+						}
+						c.txIDsMu.Unlock()
+					}
+				}
 			}
 		}()
 	}
@@ -134,6 +173,7 @@ func (c *CoreService) runLoad(ctx context.Context, pool AccountPool) {
 		{StreamValid, c.cfg.ValidRPS, builder.BuildValid},
 		{StreamInvalidBalance, c.cfg.InvalidRPS, builder.BuildInvalidBalance},
 		{StreamInvalidCurrency, c.cfg.InvalidCurrencyRPS, builder.BuildInvalidCurrency},
+		{StreamStats, c.cfg.StatsRPS, c.buildStats},
 	}
 
 	var streamsWg sync.WaitGroup
@@ -146,8 +186,8 @@ func (c *CoreService) runLoad(ctx context.Context, pool AccountPool) {
 	}
 
 	log.Printf(
-		"loadgen: load phase running valid=%.0f/s invalid_balance=%.0f/s invalid_currency=%.0f/s workers=%d",
-		c.cfg.ValidRPS, c.cfg.InvalidRPS, c.cfg.InvalidCurrencyRPS, c.cfg.TxWorkers,
+		"loadgen: load phase running valid=%.0f/s invalid_balance=%.0f/s invalid_currency=%.0f/s stats=%.0f/s workers=%d",
+		c.cfg.ValidRPS, c.cfg.InvalidRPS, c.cfg.InvalidCurrencyRPS, c.cfg.StatsRPS, c.cfg.TxWorkers,
 	)
 
 	<-ctx.Done()
@@ -155,4 +195,17 @@ func (c *CoreService) runLoad(ctx context.Context, pool AccountPool) {
 	streamsWg.Wait()
 	close(jobs)
 	workersWg.Wait()
+}
+
+func (c *CoreService) buildStats() (TransferJob, bool) {
+	c.txIDsMu.RLock()
+	defer c.txIDsMu.RUnlock()
+	if len(c.recentTxIDs) == 0 {
+		return TransferJob{}, false
+	}
+	idx := rand.Intn(len(c.recentTxIDs))
+	return TransferJob{
+		Kind: StreamStats,
+		TxID: c.recentTxIDs[idx],
+	}, true
 }

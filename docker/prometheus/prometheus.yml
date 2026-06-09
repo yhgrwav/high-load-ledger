@@ -17,13 +17,24 @@ scrape_configs:
     static_configs:
       - targets: ['posting-worker:6767']
 
-  - job_name: loadgen
+
+
+  - job_name: 'loadgen'
     static_configs:
       - targets: ['loadgen:9092']
 
-  - job_name: postgres
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+
+  - job_name: 'postgres'
     static_configs:
       - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
 
   - job_name: redis
     static_configs:

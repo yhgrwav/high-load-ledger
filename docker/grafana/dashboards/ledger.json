@@ -4,13 +4,13 @@
   "tags": ["ledger"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "id": 1,
-      "title": "Transfer / sec (business result)",
+      "title": "Transfer success/failure (business result)",
       "description": "Outcomes inside Transfer use case on gateway. Filter: job=ledger-gateway.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
@@ -28,9 +28,8 @@
       }
     },
     {
-      "id": 2,
-      "title": "Transfer / sec (gRPC code)",
-      "description": "RPC Transfer only — how clients see responses (OK, FailedPrecondition, Internal, …).",
+      "id": 5,
+      "title": "RPS (All gRPC / sec by RPC)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "reqps" } },
@@ -38,12 +37,12 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(ledger_grpc_requests_total{job=\"ledger-gateway\", rpc=\"Transfer\"}[1m])) by (code)",
-          "legendFormat": "{{code}}"
+          "expr": "sum(rate(ledger_grpc_requests_total{job=\"ledger-gateway\"}[1m])) by (rpc, code)",
+          "legendFormat": "{{rpc}} {{code}}"
         }
       ],
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean"] }
       }
     },
     {
@@ -69,52 +68,11 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
     },
     {
-      "id": 4,
-      "title": "System errors / sec",
-      "description": "DB/infra failures (maps to gRPC Internal).",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "fixed", "fixedColor": "red" } } },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(ledger_transfer_total{job=\"ledger-gateway\", result=\"system_error\"}[1m]))",
-          "legendFormat": "system_error"
-        },
-        {
-          "refId": "B",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(ledger_grpc_requests_total{job=\"ledger-gateway\", rpc=\"Transfer\", code=\"Internal\"}[1m]))",
-          "legendFormat": "gRPC Internal"
-        }
-      ],
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
-    },
-    {
-      "id": 5,
-      "title": "All gRPC / sec by RPC",
-      "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 16 },
-      "fieldConfig": { "defaults": { "unit": "reqps" } },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(ledger_grpc_requests_total{job=\"ledger-gateway\"}[1m])) by (rpc, code)",
-          "legendFormat": "{{rpc}} {{code}}"
-        }
-      ],
-      "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean"] }
-      }
-    },
-    {
       "id": 6,
       "title": "Posting worker: balance corrections",
       "description": "Increases only when worker fixes a drift. Zero is healthy.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "fieldConfig": { "defaults": { "unit": "short" } },
       "targets": [
         {

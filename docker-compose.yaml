@@ -6,7 +6,10 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: postgres
+      DB_PORT: 5432
+      DB_SSL_MODE: disable
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       DB_NAME: ${DB_NAME}
       DB_SUPER_USER: ${DB_SUPER_USER}
       DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
@@ -15,6 +18,9 @@ services:
       REDIS_POOL_SIZE: ${REDIS_POOL_SIZE:-500}
       METRICS_PORT: ${METRICS_PORT}
       GRPC_PORT: ${GRPC_PORT}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-completed_transactions}
+      GOMAXPROCS: 4
     expose:
       - "50051"
       - "6767"
@@ -23,6 +29,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+      ledger-app-migrate:
+        condition: service_completed_successfully
 
   posting-worker:
     build:
@@ -31,6 +43,8 @@ services:
     restart: unless-stopped
     environment:
       DB_HOST: postgres
+      DB_PORT: 5432
+      DB_SSL_MODE: disable
       DB_NAME: ${DB_NAME}
       DB_SUPER_USER: ${DB_SUPER_USER}
       DB_SUPER_PASSWORD: ${DB_SUPER_PASSWORD}
@@ -58,7 +72,7 @@ services:
     ports:
       - "8085:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
       - ledger_network
     depends_on:
@@ -93,7 +107,7 @@ services:
     networks:
       - ledger_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_SUPER_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -153,33 +167,83 @@ services:
     image: redis:7-alpine
     container_name: ledger_redis
     restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
       - "${REDIS_PORT}:6379"
     networks:
       - ledger_network
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.67.0-alpine
+    image: oliver006/redis_exporter:v1.58.0
     container_name: ledger_redis_exporter
     restart: unless-stopped
     environment:
-      REDIS_ADDR: redis://redis:6379
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "9121:9121"
     networks:
       - ledger_network
     depends_on:
       - redis
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.18.1
+    image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: ledger_postgres_exporter
     restart: unless-stopped
     environment:
-      DATA_SOURCE_NAME: postgresql://${DB_SUPER_USER}:${DB_SUPER_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
+      DATA_SOURCE_NAME: "postgresql://${DB_SUPER_USER}:${DB_SUPER_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+    ports:
+      - "9187:9187"
     networks:
       - ledger_network
     depends_on:
       postgres:
         condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: ledger_nginx_exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://nginx:8080/stub_status
+    ports:
+      - "9113:9113"
+    networks:
+      - ledger_network
+    depends_on:
+      - nginx
+
+  kafka:
+    image: confluentinc/confluent-local:7.6.0
+    container_name: ledger_kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    networks:
+      - ledger_network
+
+  stats-worker:
+    build:
+      context: .
+      dockerfile: docker/stats/Dockerfile
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: ${REDIS_DB}
+      REDIS_TRANSACTION_TTL: ${REDIS_TRANSACTION_TTL}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-completed_transactions}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-ledger-stats-cache}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks:
+      - ledger_network
+    depends_on:
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
 
   loadgen:
     build:
@@ -192,6 +256,7 @@ services:
       VALID_RPS: ${VALID_RPS}
       INVALID_RPS: ${INVALID_RPS}
       INVALID_CURRENCY_RPS: ${INVALID_CURRENCY_RPS}
+      STATS_RPS: ${STATS_RPS}
       LOAD_DURATION: ${LOAD_DURATION}
       LOAD_BOOTSTRAP_WORKERS: ${LOAD_BOOTSTRAP_WORKERS}
       LOAD_TX_WORKERS: ${LOAD_TX_WORKERS}
@@ -206,6 +271,8 @@ services:
       nginx:
         condition: service_started
       gateway:
+        condition: service_started
+      stats-worker:
         condition: service_started
       ledger-app-migrate:
         condition: service_completed_successfully

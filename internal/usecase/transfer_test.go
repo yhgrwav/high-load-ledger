@@ -13,7 +13,7 @@ import (
 )
 
 func TestTransferUseCase_validateRequest(t *testing.T) {
-	uc := NewTransferUseCase(&mockTransferRepo{}, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(&mockTransferRepo{}, &mockCache{}, testLogger(), 0, nil, nil)
 
 	fromID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	toID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
@@ -99,7 +99,7 @@ func TestTransferUseCase_Transaction_idempotencyCacheHit(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, cache, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, cache, testLogger(), 0, nil, nil)
 
 	fromID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	toID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
@@ -132,7 +132,7 @@ func TestTransferUseCase_Transaction_insufficientFunds(t *testing.T) {
 		return entity.ErrInsufficientFunds
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	_, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -156,7 +156,7 @@ func TestTransferUseCase_Transaction_currencyMismatch(t *testing.T) {
 		&entity.Account{ID: toID, Balance: 0, Currency: entity.CURRENCY_EUR},
 	)
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	_, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -208,7 +208,7 @@ func TestTransferUseCase_Transaction_success(t *testing.T) {
 		},
 	}
 
-	uc := NewTransferUseCase(repo, cache, testLogger(), time.Minute, nil)
+	uc := NewTransferUseCase(repo, cache, testLogger(), time.Minute, nil, nil)
 
 	got, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -254,7 +254,7 @@ func TestTransferUseCase_Transaction_duplicateCreateReturnsExisting(t *testing.T
 		return existingID, nil
 	}
 
-	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), time.Minute, nil)
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), time.Minute, nil, nil)
 
 	got, err := uc.Transaction(context.Background(), entity.TransactionRequest{
 		IdempotencyKey: key,
@@ -286,17 +286,7 @@ func TestTransferUseCase_validateTransferCurrencies(t *testing.T) {
 	}
 }
 
-func transferRepoWithAccounts(from, to *entity.Account) *mockTransferRepo {
-	lookup := func(id uuid.UUID) (*entity.Account, error) {
-		switch id {
-		case from.ID:
-			return from, nil
-		case to.ID:
-			return to, nil
-		default:
-			return nil, entity.ErrAccountNotFound
-		}
-	}
+	uc := NewTransferUseCase(repo, &mockCache{}, testLogger(), 0, nil, nil)
 
 	return &mockTransferRepo{
 		getByIDFn: func(_ context.Context, id uuid.UUID) (*entity.Account, error) {

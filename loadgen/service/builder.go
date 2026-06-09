@@ -3,6 +3,8 @@ package service
 import (
 	"math/rand"
 
+	"github.com/google/uuid"
+
 	gen "high-load-ledger/gen/go"
 )
 
@@ -12,6 +14,7 @@ type TransferJob struct {
 	From     []byte
 	To       []byte
 	Amount   int64
+	TxID     uuid.UUID
 }
 
 type TransferBuilder struct {

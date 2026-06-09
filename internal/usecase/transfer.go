@@ -18,18 +18,24 @@ type transferRepo interface {
 	repository.PostingRepository
 }
 
+type transactionPublisher interface {
+	PublishTransaction(ctx context.Context, tx entity.Transaction) error
+}
+
 type TransferUseCase struct {
 	repo              transferRepo
 	cache             repository.CacheRepository
+	publisher         transactionPublisher
 	logger            *slog.Logger
 	idempotencyKeyTTL time.Duration
 	metrics           *telemetry.PrometheusMetrics
 }
 
-func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics) *TransferUseCase {
+func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics, publisher transactionPublisher) *TransferUseCase {
 	return &TransferUseCase{
 		repo:              repo,
 		cache:             cache,
+		publisher:         publisher,
 		logger:            logger,
 		idempotencyKeyTTL: ttl,
 		metrics:           metrics,
@@ -145,6 +151,13 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, trx.ID[:], t.idempotencyKeyTTL)
+
+	//когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
+	if t.publisher != nil {
+		if err := t.publisher.PublishTransaction(ctx, trx); err != nil {
+			t.logger.ErrorContext(ctx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
+		}
+	}
 
 	return trx.ID, nil
 }
