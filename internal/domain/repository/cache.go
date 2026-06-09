@@ -9,8 +9,10 @@ import (
 )
 
 type CacheRepository interface {
-	SetIdempotencyKey(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error
-	GetIdempotencyKey(ctx context.Context, key uuid.UUID) ([]byte, error)
+	TryGetIdempotencyKey(ctx context.Context, key uuid.UUID, ttl time.Duration) (bool, error)
+	SetIdempotencyKey(ctx context.Context, key uuid.UUID, value []byte, ttl time.Duration) error
+	GetIdempotencyKey(ctx context.Context, key uuid.UUID) (entity.IdempotencyEntry, error)
+	DeleteIdempotencyKey(ctx context.Context, key uuid.UUID) error
 
 	SetBalance(ctx context.Context, accountID uuid.UUID, amount int64, ttl time.Duration) error
 	GetBalance(ctx context.Context, accountID uuid.UUID) (int64, error)
