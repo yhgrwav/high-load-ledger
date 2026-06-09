@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (db *Repository) CreateTransaction(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error {
@@ -20,6 +21,12 @@ func (db *Repository) CreateTransaction(ctx context.Context, tx entity.CustomTx,
 	}
 	_, err = t.Exec(ctx, query, tr.ID, tr.FromAccountID, tr.ToAccountID, tr.Currency, tr.Amount, tr.IdempotencyKey, tr.CreatedAt)
 	if err != nil {
+		// Проверяем, является ли ошибка нарушением уникальности (код 23505 в Postgres)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return entity.ErrIdempotencyConflict
+		}
+
 		db.logger.ErrorContext(ctx, "db: create transaction error", "err", err)
 		return err
 	}
