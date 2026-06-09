@@ -113,3 +113,50 @@ func (db *Repository) CreditBalance(ctx context.Context, tx entity.CustomTx, id 
 	}
 	return nil
 }
+
+func (db *Repository) GetTwoForUpdate(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error) {
+	t, err := db.castTx(ctx, tx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at
+             FROM ledger.accounts
+             WHERE user_id IN ($1, $2)
+             ORDER BY user_id
+             FOR UPDATE`
+
+	rows, err := t.Query(ctx, query, fromAccountID, toAccountID)
+	if err != nil {
+		db.logger.ErrorContext(ctx, "db: failed to get account", "err", err)
+		return nil, nil, fmt.Errorf("failed to get account: %w", err)
+	}
+	defer rows.Close()
+
+	var acc1, acc2 entity.Account
+	var found1, found2 bool
+
+	for rows.Next() {
+		var acc entity.Account
+		if err := rows.Scan(&acc.ID, &acc.Balance, &acc.Currency, &acc.LatestPostingID, &acc.UpdatedAt); err != nil {
+			return nil, nil, err
+		}
+		if acc.ID == fromAccountID {
+			acc1 = acc
+			found1 = true
+		} else if acc.ID == toAccountID {
+			acc2 = acc
+			found2 = true
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	if !found1 || !found2 {
+		return nil, nil, entity.ErrAccountNotFound
+	}
+
+	return &acc1, &acc2, nil
+}
