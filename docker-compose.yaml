@@ -30,7 +30,9 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       redis:
         condition: service_started
       ledger-app-migrate:
@@ -84,6 +86,8 @@ services:
     restart: unless-stopped
     command:
       - -nginx.scrape-uri=http://ledger_nginx/stub_status
+    ports:
+      - "9113:9113"
     networks:
       - ledger_network
     depends_on:
@@ -201,25 +205,50 @@ services:
       postgres:
         condition: service_healthy
 
-  nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.1.0
-    container_name: ledger_nginx_exporter
-    restart: unless-stopped
-    command:
-      - -nginx.scrape-uri=http://nginx:8080/stub_status
-    ports:
-      - "9113:9113"
-    networks:
-      - ledger_network
-    depends_on:
-      - nginx
+
 
   kafka:
     image: confluentinc/confluent-local:7.6.0
     container_name: ledger_kafka
+    hostname: kafka
     restart: unless-stopped
     ports:
       - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka:29092"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    networks:
+      - ledger_network
+
+  kafka-init:
+    image: confluentinc/confluent-local:7.6.0
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic $${KAFKA_TOPIC:-completed_transactions} --partitions 3 --replication-factor 1
+    environment:
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-completed_transactions}
     networks:
       - ledger_network
 
@@ -243,7 +272,9 @@ services:
       redis:
         condition: service_started
       kafka:
-        condition: service_started
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   loadgen:
     build:
