@@ -31,12 +31,18 @@ func (m *mockCache) GetIdempotencyKey(ctx context.Context, key uuid.UUID) ([]byt
 	return nil, entity.ErrTransactionNotFound
 }
 
-func (m *mockCache) SetIdempotencyKey(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error {
+func (m *mockCache) LockIdempotencyKey(context.Context, uuid.UUID, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (m *mockCache) SaveIdempotencyResponse(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error {
 	if m.setFn != nil {
 		return m.setFn(ctx, key, response, ttl)
 	}
 	return nil
 }
+
+func (m *mockCache) DeleteIdempotencyKey(context.Context, uuid.UUID) error { return nil }
 
 func (m *mockCache) SetBalance(context.Context, uuid.UUID, int64, time.Duration) error { return nil }
 func (m *mockCache) GetBalance(context.Context, uuid.UUID) (int64, error)              { return 0, nil }
