@@ -85,7 +85,7 @@ services:
     container_name: ledger_nginx_exporter
     restart: unless-stopped
     command:
-      - -nginx.scrape-uri=http://ledger_nginx/stub_status
+      - -nginx.scrape-uri=http://ledger_nginx:8080/stub_status
     ports:
       - "9113:9113"
     networks:
@@ -290,7 +290,7 @@ services:
       STATS_RPS: ${STATS_RPS}
       LOAD_DURATION: ${LOAD_DURATION}
       LOAD_BOOTSTRAP_WORKERS: ${LOAD_BOOTSTRAP_WORKERS}
-      LOAD_TX_WORKERS: ${LOAD_TX_WORKERS}
+      LOAD_TX_WORKERS: ${LOAD_TX_WORKERS:-500}
       BOOTSTRAP_MAX_ERROR_PCT: ${BOOTSTRAP_MAX_ERROR_PCT}
       LOADGEN_GRPC_ADDR: nginx:80
       LOADGEN_METRICS_PORT: ${LOADGEN_METRICS_PORT:-9092}
