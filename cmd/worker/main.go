@@ -48,7 +48,15 @@ func main() {
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer initCancel()
 
-	pool, err := pgxpool.New(initCtx, pgCfg.ConnectionString())
+	poolCfg, err := pgxpool.ParseConfig(pgCfg.ConnectionString())
+	if err != nil {
+		lgr.Error("parse postgres pool config", "error", err)
+		os.Exit(1)
+	}
+	poolCfg.MaxConns = pgCfg.MaxConns
+	poolCfg.MinConns = pgCfg.MinConns
+
+	pool, err := pgxpool.NewWithConfig(initCtx, poolCfg)
 	if err != nil {
 		lgr.Error("create postgres pool", "error", err)
 		os.Exit(1)
