@@ -1,4 +1,4 @@
-package redees
+package redis
 
 import (
 	"log/slog"
