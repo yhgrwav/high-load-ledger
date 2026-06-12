@@ -1,26 +1,10 @@
 package entity
 
-import "bytes"
-
-type IdempotencyState int
+type IdempotencyStatus string
 
 const (
-	IdempotencyUnused IdempotencyState = iota
-	IdempotencyInProgress
-	IdempotencyCompleted
+	IDEMPOTENCY_STATUS_UNSPECIFIED IdempotencyStatus = "unspecified"
+	IDEMPOTENCY_IN_PROCESS         IdempotencyStatus = "in process"
+	IDEMPOTENCY_MISS               IdempotencyStatus = "miss"
+	IDEMPOTENCY_COMPLETED          IdempotencyStatus = "completed"
 )
-
-// IdempotencyInProgressMarker — значение в Redis, пока запрос обрабатывается.
-var IdempotencyInProgressMarker = []byte("IN_PROGRESS")
-
-type IdempotencyEntry struct {
-	State    IdempotencyState
-	Response []byte
-}
-
-func ParseIdempotencyValue(raw []byte) IdempotencyEntry {
-	if bytes.Equal(raw, IdempotencyInProgressMarker) {
-		return IdempotencyEntry{State: IdempotencyInProgress}
-	}
-	return IdempotencyEntry{State: IdempotencyCompleted, Response: raw}
-}
