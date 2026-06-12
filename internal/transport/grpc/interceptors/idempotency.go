@@ -25,20 +25,12 @@ func UnaryIdempotencyInterceptor(idem repository.IdempotencyRepository) grpc.Una
 			return handler(ctx, req)
 		}
 
-		st, err := idem.GetIdempotencyStatus(ctx, key)
+		claimed, err := idem.SetAndCheck(ctx, key, entity.IDEMPOTENCY_IN_PROCESS)
 		if err != nil {
 			return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
 		}
-
-		if txID, ok := parseCompleted(st); ok {
-			return &ledger.TransferResponse{TransactionId: txID[:]}, nil
-		}
-		if st == entity.IDEMPOTENCY_IN_PROCESS {
-			return nil, status.Error(codes.Aborted, entity.ErrIdempotencyInProgress.Error())
-		}
-
-		if err := idem.SetAndCheck(ctx, key, entity.IDEMPOTENCY_IN_PROCESS); err != nil {
-			return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
+		if !claimed {
+			return cachedTransfer(ctx, idem, key)
 		}
 
 		resp, err := handler(ctx, req)
@@ -60,6 +52,19 @@ func UnaryIdempotencyInterceptor(idem repository.IdempotencyRepository) grpc.Una
 
 		return out, nil
 	}
+}
+
+func cachedTransfer(ctx context.Context, idem repository.IdempotencyRepository, key uuid.UUID) (*ledger.TransferResponse, error) {
+	st, err := idem.GetIdempotencyStatus(ctx, key)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
+	}
+
+	if txID, ok := parseCompleted(st); ok {
+		return &ledger.TransferResponse{TransactionId: txID[:]}, nil
+	}
+
+	return nil, status.Error(codes.Aborted, entity.ErrIdempotencyInProgress.Error())
 }
 
 func completedStatus(txID uuid.UUID) entity.IdempotencyStatus {
