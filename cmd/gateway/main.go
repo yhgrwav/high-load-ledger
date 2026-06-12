@@ -103,7 +103,10 @@ func main() {
 	repo := postgres.NewConnectionPool(pool, lgr)
 	cacheRepo := redisRepo.NewCacheRepository(rdb, lgr)
 	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(tel.Metrics)),
+		grpc.ChainUnaryInterceptor(
+			interceptors.UnaryMetricsInterceptor(tel.Metrics),
+			interceptors.UnaryIdempotencyInterceptor(cacheRepo),
+		),
 		grpc.MaxConcurrentStreams(1000),
 	)
 
