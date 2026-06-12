@@ -9,11 +9,6 @@ import (
 )
 
 type CacheRepository interface {
-	LockIdempotencyKey(ctx context.Context, key uuid.UUID, ttl time.Duration) (acquired bool, err error)
-	GetIdempotencyKey(ctx context.Context, key uuid.UUID) ([]byte, error)
-	SaveIdempotencyResponse(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error
-	DeleteIdempotencyKey(ctx context.Context, key uuid.UUID) error
-
 	SetBalance(ctx context.Context, accountID uuid.UUID, amount int64, ttl time.Duration) error
 	GetBalance(ctx context.Context, accountID uuid.UUID) (int64, error)
 	DeleteBalance(ctx context.Context, accountID uuid.UUID) error
