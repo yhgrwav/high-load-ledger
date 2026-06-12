@@ -15,7 +15,7 @@ import (
 )
 
 func newTransferUC(repo *mockTransferRepo, cache *mockCache) *TransferUseCase {
-	return NewTransferUseCase(repo, cache, 0, testLogger(), nil, nil)
+	return NewTransferUseCase(repo, cache, testLogger(), nil, nil)
 }
 
 func TestTransferUseCase_validateRequest(t *testing.T) {
@@ -304,64 +304,6 @@ func TestTransferUseCase_Transaction_success(t *testing.T) {
 	if creditAmount != 100 {
 
 		t.Fatalf("credit amount = %d, want 100", creditAmount)
-
-	}
-
-}
-
-func TestTransferUseCase_Transaction_duplicateCreateReturnsExisting(t *testing.T) {
-
-	key := uuid.MustParse("00000000-0000-0000-0000-000000000099")
-
-	fromID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-	toID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-
-	existingID := uuid.MustParse("00000000-0000-0000-0000-00000000bb01")
-
-	repo := transferRepoWithAccounts(
-
-		&entity.Account{ID: fromID, Balance: 1000, Currency: entity.CURRENCY_USD},
-
-		&entity.Account{ID: toID, Balance: 0, Currency: entity.CURRENCY_USD},
-	)
-
-	repo.createTransactionFn = func(context.Context, entity.CustomTx, *entity.Transaction) error {
-
-		return entity.ErrIdempotencyConflict
-
-	}
-
-	repo.checkIdempotencyFn = func(context.Context, uuid.UUID) (uuid.UUID, error) {
-
-		return existingID, nil
-
-	}
-
-	uc := newTransferUC(repo, &mockCache{})
-
-	got, err := uc.Transaction(context.Background(), entity.TransactionRequest{
-
-		IdempotencyKey: key,
-
-		FromAccountID: fromID,
-
-		ToAccountID: toID,
-
-		Currency: entity.CURRENCY_USD,
-
-		Amount: 100,
-	})
-
-	if err != nil {
-
-		t.Fatalf("Transaction() error = %v", err)
-
-	}
-
-	if got != existingID {
-
-		t.Fatalf("Transaction() id = %v, want %v", got, existingID)
 
 	}
 
