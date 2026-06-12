@@ -20,8 +20,13 @@ func castKey(idempotencyKey uuid.UUID) string {
 	return fmt.Sprintf("idempotency:%s", idempotencyKey)
 }
 
-func (r *CacheRepo) SetAndCheck(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) error {
-	return r.rdb.SetNX(ctx, castKey(idempotencyKey), status, idempotencyKeyTTL).Err()
+func (r *CacheRepo) SetAndCheck(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) (bool, error) {
+	exists, err := r.rdb.SetNX(ctx, castKey(idempotencyKey), status, idempotencyKeyTTL).Result()
+	if err != nil {
+		r.logger.ErrorContext(ctx, "redis: SetNX internal error", err)
+		return false, err
+	}
+	return exists, err
 }
 
 func (r *CacheRepo) GetIdempotencyStatus(ctx context.Context, idempotencyKey uuid.UUID) (entity.IdempotencyStatus, error) {
