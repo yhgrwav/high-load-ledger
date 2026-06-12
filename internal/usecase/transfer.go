@@ -23,22 +23,20 @@ type transactionPublisher interface {
 }
 
 type TransferUseCase struct {
-	repo              transferRepo
-	cache             repository.CacheRepository
-	publisher         transactionPublisher
-	logger            *slog.Logger
-	idempotencyKeyTTL time.Duration
-	metrics           *telemetry.PrometheusMetrics
+	repo      transferRepo
+	cache     repository.CacheRepository
+	publisher transactionPublisher
+	logger    *slog.Logger
+	metrics   *telemetry.PrometheusMetrics
 }
 
-func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics, publisher transactionPublisher) *TransferUseCase {
+func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, metrics *telemetry.PrometheusMetrics, publisher transactionPublisher) *TransferUseCase {
 	return &TransferUseCase{
-		repo:              repo,
-		cache:             cache,
-		publisher:         publisher,
-		logger:            logger,
-		idempotencyKeyTTL: ttl,
-		metrics:           metrics,
+		repo:      repo,
+		cache:     cache,
+		publisher: publisher,
+		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
@@ -75,21 +73,12 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
-	// 2. проверяем ключ идемпотентности, прежде чем выполнять логику (оптимистичная защита)
-	txID, err := t.checkIdempotency(ctx, req.IdempotencyKey)
-	if err == nil {
-		return txID, nil
-	}
-	if !errors.Is(err, entity.ErrTransactionNotFound) {
-		return uuid.Nil, err
-	}
-
-	// 3. валидируем тип валют (это часть бизнес логики)
+	// 2. валидируем тип валют (это часть бизнес логики)
 	if err = t.validateTransferCurrencies(ctx, req.FromAccountID, req.ToAccountID, req.Currency); err != nil {
 		return uuid.Nil, err
 	}
 
-	// 4. если валидация прошла успешно - начинаем транзакцию
+	// 3. если валидация прошла успешно - начинаем транзакцию
 	tx, err := t.repo.BeginTx(ctx)
 	if err != nil {
 		return uuid.Nil, err
@@ -108,7 +97,7 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		return uuid.Nil, err
 	}
 
-	// 5. создаём сущность транзакции
+	// 4. создаём сущность транзакции
 	trx := entity.Transaction{
 		ID:             trxID,
 		IdempotencyKey: req.IdempotencyKey,
@@ -119,64 +108,51 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		CreatedAt:      time.Now(),
 	}
 
-	// 6. с созданной сущностью идём в базу, чтобы сохранить запись
+	// 5. с созданной сущностью идём в базу, чтобы сохранить запись
 	if err = t.repo.CreateTransaction(ctx, tx, &trx); err != nil {
-		// 7. проверяем, не является ли ошибка нарушением уникальности ключа идемпотентности
-		// Если это конфликт уникальности, значит кто-то другой уже обработал этот запрос
-		if errors.Is(err, entity.ErrIdempotencyConflict) {
-			existingID, checkErr := t.checkIdempotency(ctx, req.IdempotencyKey)
-			if checkErr == nil {
-				return existingID, nil
-			}
-		}
-
-		// Если это любая другая ошибка (сеть, таймаут и т.д.) - просто возвращаем её
 		return uuid.Nil, err
 	}
 
-	// 8. создаём записи для журнала, по которому наш фоновый воркер будет сверять балансы
+	// 6. создаём записи для журнала, по которому наш фоновый воркер будет сверять балансы
 	postings := []entity.Posting{
 		{TransactionID: trx.ID, AccountID: req.FromAccountID, Amount: -req.Amount},
 		{TransactionID: trx.ID, AccountID: req.ToAccountID, Amount: req.Amount},
 	}
 
-	// 9. отправляем записи в базу
+	// 7. отправляем записи в базу
 	if err = t.repo.CreatePostings(ctx, tx, postings); err != nil {
 		return uuid.Nil, err
 	}
 
-	// 10. получаем аккаунты (выполняя блокировку)
+	// 8. получаем аккаунты (выполняя блокировку)
 	fromAcc, _, err := t.repo.GetTwoForUpdate(ctx, tx, req.FromAccountID, req.ToAccountID)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	// 11. затем проверяем аккаунт отправителя на нехватку денег
+	// 9. затем проверяем аккаунт отправителя на нехватку денег
 	if fromAcc.Balance < req.Amount {
 		return uuid.Nil, entity.ErrInsufficientFunds
 	}
 
 	// если всё ок {
 
-	// 12. снимаем у отправителя
+	// 10. снимаем у отправителя
 	if err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount); err != nil {
 		return uuid.Nil, err
 	}
 
-	// 13. добавляем получателю
+	// 11. добавляем получателю
 	if err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount); err != nil {
 		return uuid.Nil, err
 	}
 
 	//}
 
-	// 14. если всё прошло успешно - коммитим транзакцию
+	// 12. если всё прошло успешно - коммитим транзакцию
 	if err = t.repo.CommitTx(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
-
-	// 15. полученный ключ идемпотентности записываем в кэш, на случай ошибочного дублирования запросов
-	_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, trx.ID[:], t.idempotencyKeyTTL)
 
 	// когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
 	if t.publisher != nil {
@@ -186,24 +162,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	return trx.ID, nil
-}
-
-func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
-	val, err := t.cache.GetIdempotencyKey(ctx, key)
-	if err == nil && len(val) == 16 {
-		if id, err := uuid.FromBytes(val); err == nil {
-			return id, nil
-		}
-	}
-
-	uid, err := t.repo.CheckIdempotencyKey(ctx, key)
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	_ = t.cache.SetIdempotencyKey(ctx, key, uid[:], t.idempotencyKeyTTL)
-
-	return uid, nil
 }
 
 func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
