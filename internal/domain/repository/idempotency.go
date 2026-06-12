@@ -8,8 +8,8 @@ import (
 )
 
 type IdempotencyRepository interface {
-	SetIdempotency(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) error
-	GetIdempotency(ctx context.Context, idempotencyKey uuid.UUID) (uuid.UUID, entity.IdempotencyStatus, error)
+	SetAndCheck(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) error
+	GetIdempotencyStatus(ctx context.Context, idempotencyKey uuid.UUID) (entity.IdempotencyStatus, error)
 	UpdateIdempotencyStatus(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) error
 	DeleteIdempotency(ctx context.Context, idempotencyKey uuid.UUID) error
 }
