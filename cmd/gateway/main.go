@@ -60,11 +60,6 @@ func main() {
 
 	tel := telemetry.New(telCfg, *lgr)
 
-	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(tel.Metrics)),
-		grpc.MaxConcurrentStreams(1000),
-	)
-
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer initCancel()
 
@@ -74,8 +69,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	poolCfg.MaxConns = 32
-	poolCfg.MinConns = 8
+	poolCfg.MaxConns = pgCfg.MaxConns
+	poolCfg.MinConns = pgCfg.MinConns
 	poolCfg.MaxConnLifetime = 30 * time.Minute
 	poolCfg.MaxConnIdleTime = 5 * time.Minute
 	poolCfg.HealthCheckPeriod = 30 * time.Second
@@ -96,6 +91,7 @@ func main() {
 		Addr:     redisCfg.Addr(),
 		Password: redisCfg.Password,
 		DB:       redisCfg.DB,
+		PoolSize: redisCfg.PoolSize,
 	})
 	defer rdb.Close()
 
@@ -106,19 +102,26 @@ func main() {
 
 	repo := postgres.NewConnectionPool(pool, lgr)
 	cacheRepo := redisRepo.NewCacheRepository(rdb, lgr)
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.UnaryMetricsInterceptor(tel.Metrics)),
+		grpc.MaxConcurrentStreams(1000),
+	)
 
 	kafkaWriter := &kafka.Writer{
-		Addr:         kafka.TCP(kafkaCfg.BrokerList()...),
-		Topic:        kafkaCfg.Topic,
-		Balancer:     &kafka.LeastBytes{},
-		RequiredAcks: kafka.RequireOne,
-		Async:        false,
+		Addr:                   kafka.TCP(kafkaCfg.BrokerList()...),
+		Topic:                  kafkaCfg.Topic,
+		Balancer:               &kafka.LeastBytes{},
+		RequiredAcks:           kafka.RequireOne,
+		Async:                  true,
+		AllowAutoTopicCreation: true,
+		BatchSize:              100,
+		BatchTimeout:           5 * time.Millisecond,
 	}
 	defer kafkaWriter.Close()
 
 	producer := kafkainfra.NewProducer(kafkaWriter, lgr)
 
-	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, redisCfg.TransactionTTL, tel.Metrics, producer)
+	transferUC := usecase.NewTransferUseCase(repo, cacheRepo, lgr, tel.Metrics, producer)
 	accountUC := usecase.NewAccountUseCase(repo, cacheRepo, lgr)
 	statsUC := usecase.NewStatsUseCase(repo, cacheRepo, lgr)
 
