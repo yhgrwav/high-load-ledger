@@ -23,26 +23,25 @@ type transactionPublisher interface {
 }
 
 type TransferUseCase struct {
-	repo              transferRepo
-	cache             repository.CacheRepository
-	publisher         transactionPublisher
-	logger            *slog.Logger
-	idempotencyKeyTTL time.Duration
-	metrics           *telemetry.PrometheusMetrics
+	repo      transferRepo
+	cache     repository.CacheRepository
+	publisher transactionPublisher
+	logger    *slog.Logger
+	metrics   *telemetry.PrometheusMetrics
 }
 
-func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, ttl time.Duration, metrics *telemetry.PrometheusMetrics, publisher transactionPublisher) *TransferUseCase {
+func NewTransferUseCase(repo transferRepo, cache repository.CacheRepository, logger *slog.Logger, metrics *telemetry.PrometheusMetrics, publisher transactionPublisher) *TransferUseCase {
 	return &TransferUseCase{
-		repo:              repo,
-		cache:             cache,
-		publisher:         publisher,
-		logger:            logger,
-		idempotencyKeyTTL: ttl,
-		metrics:           metrics,
+		repo:      repo,
+		cache:     cache,
+		publisher: publisher,
+		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
 func (t *TransferUseCase) Transaction(ctx context.Context, req entity.TransactionRequest) (id uuid.UUID, err error) {
+	// если не произошло никаких ошибок - метрики оставляем пустыми
 	defer func() {
 		if t.metrics == nil {
 			return
@@ -65,41 +64,40 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 			status = "system_error"
 		}
 
+		// если получили ошибку - отдаём статус в метрики
 		t.metrics.RecordTransfer(status)
 	}()
 
+	// 1. валидируем запрос с помощью вспомогательной функции
 	if err := t.validateRequest(req); err != nil {
 		return uuid.Nil, err
 	}
 
-	txID, err := t.checkIdempotency(ctx, req.IdempotencyKey)
-	if err == nil {
-		return txID, nil
-	}
-	if !errors.Is(err, entity.ErrTransactionNotFound) {
-		return uuid.Nil, err
-	}
-
+	// 2. валидируем тип валют (это часть бизнес логики)
 	if err = t.validateTransferCurrencies(ctx, req.FromAccountID, req.ToAccountID, req.Currency); err != nil {
 		return uuid.Nil, err
 	}
 
+	// 3. если валидация прошла успешно - начинаем транзакцию
 	tx, err := t.repo.BeginTx(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
+	// если во время транзакции что-то идёт не так - откатываем
 	defer func() {
 		if err != nil {
 			_ = t.repo.RollbackTx(ctx, tx)
 		}
 	}()
 
+	// создаём uuidV7 (более оптимизированную для индексации версию) для сущности транзакции
 	trxID, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, err
 	}
 
+	// 4. создаём сущность транзакции
 	trx := entity.Transaction{
 		ID:             trxID,
 		IdempotencyKey: req.IdempotencyKey,
@@ -110,49 +108,53 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		CreatedAt:      time.Now(),
 	}
 
+	// 5. с созданной сущностью идём в базу, чтобы сохранить запись
 	if err = t.repo.CreateTransaction(ctx, tx, &trx); err != nil {
-		_ = t.repo.RollbackTx(ctx, tx)
-
-		existingID, checkErr := t.checkIdempotency(ctx, req.IdempotencyKey)
-		if checkErr == nil {
-			return existingID, nil
-		}
-
 		return uuid.Nil, err
 	}
 
+	// 6. создаём записи для журнала, по которому наш фоновый воркер будет сверять балансы
 	postings := []entity.Posting{
 		{TransactionID: trx.ID, AccountID: req.FromAccountID, Amount: -req.Amount},
 		{TransactionID: trx.ID, AccountID: req.ToAccountID, Amount: req.Amount},
 	}
+
+	// 7. отправляем записи в базу
 	if err = t.repo.CreatePostings(ctx, tx, postings); err != nil {
 		return uuid.Nil, err
 	}
 
-	// сортировка чтобы не словить дедлок
-	if req.FromAccountID.String() < req.ToAccountID.String() {
-		err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount)
-		if err == nil {
-			err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount)
-		}
-	} else {
-		err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount)
-		if err == nil {
-			err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount)
-		}
-	}
-
+	// 8. получаем аккаунты (выполняя блокировку)
+	fromAcc, _, err := t.repo.GetTwoForUpdate(ctx, tx, req.FromAccountID, req.ToAccountID)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
+	// 9. затем проверяем аккаунт отправителя на нехватку денег
+	if fromAcc.Balance < req.Amount {
+		return uuid.Nil, entity.ErrInsufficientFunds
+	}
+
+	// если всё ок {
+
+	// 10. снимаем у отправителя
+	if err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount); err != nil {
+		return uuid.Nil, err
+	}
+
+	// 11. добавляем получателю
+	if err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount); err != nil {
+		return uuid.Nil, err
+	}
+
+	//}
+
+	// 12. если всё прошло успешно - коммитим транзакцию
 	if err = t.repo.CommitTx(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
 
-	_ = t.cache.SetIdempotencyKey(ctx, req.IdempotencyKey, trx.ID[:], t.idempotencyKeyTTL)
-
-	//когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
+	// когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
 	if t.publisher != nil {
 		if err := t.publisher.PublishTransaction(ctx, trx); err != nil {
 			t.logger.ErrorContext(ctx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
@@ -160,24 +162,6 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 	}
 
 	return trx.ID, nil
-}
-
-func (t *TransferUseCase) checkIdempotency(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
-	val, err := t.cache.GetIdempotencyKey(ctx, key)
-	if err == nil && len(val) == 16 {
-		if id, err := uuid.FromBytes(val); err == nil {
-			return id, nil
-		}
-	}
-
-	uid, err := t.repo.CheckIdempotencyKey(ctx, key)
-	if err != nil {
-		return uuid.Nil, err
-	}
-
-	_ = t.cache.SetIdempotencyKey(ctx, key, uid[:], t.idempotencyKeyTTL)
-
-	return uid, nil
 }
 
 func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {

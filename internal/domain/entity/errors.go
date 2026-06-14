@@ -13,6 +13,8 @@ var (
 	ErrEmptyIdempotencyKey = errors.New("idempotency key is required")
 	ErrInvalidUUID         = errors.New("UUID is invalid")
 
-	ErrInsufficientFunds = errors.New("insufficient funds")
-	ErrCurrencyMismatch  = errors.New("account currency does not match transfer currency")
+	ErrInsufficientFunds     = errors.New("insufficient funds")
+	ErrCurrencyMismatch      = errors.New("account currency does not match transfer currency")
+	ErrIdempotencyConflict   = errors.New("idempotency key conflict")
+	ErrIdempotencyInProgress = errors.New("idempotency request is already in progress")
 )

@@ -15,7 +15,7 @@ type Config struct {
 	StatsRPS           float64       `env:"STATS_RPS" envDefault:"50"`
 	LoadDuration       time.Duration `env:"LOAD_DURATION" envDefault:"0"`
 	BootstrapWorkers   int           `env:"LOAD_BOOTSTRAP_WORKERS" envDefault:"50"`
-	TxWorkers          int           `env:"LOAD_TX_WORKERS" envDefault:"100"`
+	TxWorkers          int           `env:"LOAD_TX_WORKERS" envDefault:"500"`
 	BootstrapMaxError  int           `env:"BOOTSTRAP_MAX_ERROR_PCT" envDefault:"33"`
 	GRPCAddr           string        `env:"LOADGEN_GRPC_ADDR" envDefault:"127.0.0.1:8085"`
 	MetricsPort        string        `env:"LOADGEN_METRICS_PORT" envDefault:"9092"`

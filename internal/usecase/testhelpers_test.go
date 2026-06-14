@@ -19,24 +19,7 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-type mockCache struct {
-	getFn func(ctx context.Context, key uuid.UUID) ([]byte, error)
-	setFn func(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error
-}
-
-func (m *mockCache) GetIdempotencyKey(ctx context.Context, key uuid.UUID) ([]byte, error) {
-	if m.getFn != nil {
-		return m.getFn(ctx, key)
-	}
-	return nil, entity.ErrTransactionNotFound
-}
-
-func (m *mockCache) SetIdempotencyKey(ctx context.Context, key uuid.UUID, response []byte, ttl time.Duration) error {
-	if m.setFn != nil {
-		return m.setFn(ctx, key, response, ttl)
-	}
-	return nil
-}
+type mockCache struct{}
 
 func (m *mockCache) SetBalance(context.Context, uuid.UUID, int64, time.Duration) error { return nil }
 func (m *mockCache) GetBalance(context.Context, uuid.UUID) (int64, error)              { return 0, nil }
@@ -50,6 +33,14 @@ func (m *mockCache) GetTransaction(context.Context, uuid.UUID) (*entity.Transact
 	return nil, nil
 }
 
+func (m *mockCache) SetAccountCurrency(context.Context, uuid.UUID, entity.Currency, time.Duration) error {
+	return nil
+}
+
+func (m *mockCache) GetAccountCurrency(context.Context, uuid.UUID) (entity.Currency, error) {
+	return entity.CURRENCY_UNSPECIFIED, nil
+}
+
 type mockTransferRepo struct {
 	beginTxFn            func(ctx context.Context) (entity.CustomTx, error)
 	commitTxFn           func(ctx context.Context, tx entity.CustomTx) error
@@ -58,9 +49,9 @@ type mockTransferRepo struct {
 	getCurrenciesFn      func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]entity.Currency, error)
 	debitBalanceFn       func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
 	creditBalanceFn      func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
+	getTwoForUpdateFn    func(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error)
 	createTransactionFn  func(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error
 	createPostingsFn     func(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error
-	checkIdempotencyFn   func(ctx context.Context, key uuid.UUID) (uuid.UUID, error)
 	getTransactionByIDFn func(ctx context.Context, id uuid.UUID) (*entity.Transaction, error)
 }
 
@@ -113,6 +104,13 @@ func (m *mockTransferRepo) CreditBalance(ctx context.Context, tx entity.CustomTx
 	return nil
 }
 
+func (m *mockTransferRepo) GetTwoForUpdate(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error) {
+	if m.getTwoForUpdateFn != nil {
+		return m.getTwoForUpdateFn(ctx, tx, fromAccountID, toAccountID)
+	}
+	return &entity.Account{ID: fromAccountID, Balance: 1_000_000}, &entity.Account{ID: toAccountID}, nil
+}
+
 func (m *mockTransferRepo) CreateTransaction(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error {
 	if m.createTransactionFn != nil {
 		return m.createTransactionFn(ctx, tx, tr)
@@ -127,13 +125,6 @@ func (m *mockTransferRepo) CreatePostings(ctx context.Context, tx entity.CustomT
 	return nil
 }
 
-func (m *mockTransferRepo) CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
-	if m.checkIdempotencyFn != nil {
-		return m.checkIdempotencyFn(ctx, key)
-	}
-	return uuid.Nil, entity.ErrTransactionNotFound
-}
-
 func (m *mockTransferRepo) GetTransactionByID(ctx context.Context, id uuid.UUID) (*entity.Transaction, error) {
 	if m.getTransactionByIDFn != nil {
 		return m.getTransactionByIDFn(ctx, id)
@@ -143,9 +134,6 @@ func (m *mockTransferRepo) GetTransactionByID(ctx context.Context, id uuid.UUID)
 
 func (m *mockTransferRepo) CreateAccount(context.Context, entity.CustomTx, *entity.Account) error {
 	return nil
-}
-func (m *mockTransferRepo) GetByID(context.Context, uuid.UUID) (*entity.Account, error) {
-	return nil, entity.ErrAccountNotFound
 }
 
 func (m *mockTransferRepo) ListPostingsByAccountID(context.Context, uuid.UUID, int, int) ([]entity.Posting, error) {
@@ -227,8 +215,8 @@ func (m *mockAccountRepo) CreditBalance(context.Context, entity.CustomTx, uuid.U
 	return nil
 }
 
-func (m *mockAccountRepo) CheckIdempotencyKey(context.Context, uuid.UUID) (uuid.UUID, error) {
-	return uuid.Nil, entity.ErrTransactionNotFound
+func (m *mockAccountRepo) GetTwoForUpdate(context.Context, entity.CustomTx, uuid.UUID, uuid.UUID) (*entity.Account, *entity.Account, error) {
+	return nil, nil, entity.ErrAccountNotFound
 }
 
 func (m *mockAccountRepo) GetTransactionByID(context.Context, uuid.UUID) (*entity.Transaction, error) {
@@ -324,7 +312,4 @@ func (m *mockStatsRepo) CommitTx(context.Context, entity.CustomTx) error   { ret
 func (m *mockStatsRepo) RollbackTx(context.Context, entity.CustomTx) error { return nil }
 func (m *mockStatsRepo) CreateTransaction(context.Context, entity.CustomTx, *entity.Transaction) error {
 	return nil
-}
-func (m *mockStatsRepo) CheckIdempotencyKey(context.Context, uuid.UUID) (uuid.UUID, error) {
-	return uuid.Nil, entity.ErrTransactionNotFound
 }

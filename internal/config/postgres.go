@@ -15,6 +15,8 @@ type Postgres struct {
 	Host          string `env:"DB_HOST"`
 	Port          string `env:"DB_PORT"`
 	SSLMode       string `env:"DB_SSL_MODE"`
+	MaxConns      int32  `env:"DB_MAX_CONNS" envDefault:"400"`
+	MinConns      int32  `env:"DB_MIN_CONNS" envDefault:"50"`
 	DSN           string `env:"DSN"`
 }
 

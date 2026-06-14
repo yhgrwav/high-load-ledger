@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (db *Repository) CreateTransaction(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error {
@@ -20,6 +21,12 @@ func (db *Repository) CreateTransaction(ctx context.Context, tx entity.CustomTx,
 	}
 	_, err = t.Exec(ctx, query, tr.ID, tr.FromAccountID, tr.ToAccountID, tr.Currency, tr.Amount, tr.IdempotencyKey, tr.CreatedAt)
 	if err != nil {
+		// Проверяем, является ли ошибка нарушением уникальности (код 23505 в Postgres)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return entity.ErrIdempotencyConflict
+		}
+
 		db.logger.ErrorContext(ctx, "db: create transaction error", "err", err)
 		return err
 	}
@@ -43,25 +50,6 @@ func (db *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*en
 		return nil, fmt.Errorf("db: get transaction error: %w", err)
 	}
 	return &tr, nil
-}
-
-func (db *Repository) CheckIdempotencyKey(ctx context.Context, key uuid.UUID) (uuid.UUID, error) {
-	query := `SELECT id
-              FROM ledger.transactions
-              WHERE idempotency_key = $1`
-
-	var trID uuid.UUID
-
-	// fix: вместо вычитывания всего тела транзакции читаем только id транзакции и возвращаем только его
-	err := db.pool.QueryRow(ctx, query, key).Scan(&trID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, entity.ErrTransactionNotFound
-		}
-		db.logger.ErrorContext(ctx, "db: get transaction error", "err", err)
-		return uuid.Nil, fmt.Errorf("db: check idempotency key error: %w", err)
-	}
-	return trID, nil
 }
 
 func (db *Repository) BeginTx(ctx context.Context) (entity.CustomTx, error) {
