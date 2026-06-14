@@ -2,7 +2,9 @@ package interceptors
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -11,10 +13,15 @@ import (
 
 	ledger "high-load-ledger/gen/go"
 	"high-load-ledger/internal/domain/entity"
-	"high-load-ledger/internal/domain/repository"
 )
 
-func UnaryIdempotencyInterceptor(idem repository.IdempotencyRepository) grpc.UnaryServerInterceptor {
+type idempotencyStorage interface {
+	CheckOrLock(ctx context.Context, key uuid.UUID) (bool, entity.IdempotencyStatus, error)
+	UpdateIdempotencyStatus(ctx context.Context, key uuid.UUID, status entity.IdempotencyStatus) error
+	DeleteIdempotency(ctx context.Context, key uuid.UUID) error
+}
+
+func UnaryIdempotencyInterceptor(idem idempotencyStorage, logger *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if info.FullMethod != ledger.TransactionService_Transfer_FullMethodName {
 			return handler(ctx, req)
@@ -25,13 +32,24 @@ func UnaryIdempotencyInterceptor(idem repository.IdempotencyRepository) grpc.Una
 			return handler(ctx, req)
 		}
 
-		claimed, err := idem.SetAndCheck(ctx, key, entity.IDEMPOTENCY_IN_PROCESS)
+		claimed, currentStatus, err := idem.CheckOrLock(ctx, key)
 		if err != nil {
-			return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
+			logger.WarnContext(ctx, "idempotency: redis unavailable, fail-open", "err", err, "key", key)
+			return handler(ctx, req)
 		}
+
 		if !claimed {
-			return cachedTransfer(ctx, idem, key)
+			return handleDuplicate(currentStatus)
 		}
+
+		defer func() {
+			if r := recover(); r != nil {
+				_ = idem.DeleteIdempotency(ctx, key)
+				logger.ErrorContext(ctx, "idempotency: internal server error", "err", err, "key", key)
+
+				err = status.Errorf(codes.Internal, "internal server error")
+			}
+		}()
 
 		resp, err := handler(ctx, req)
 		if err != nil {
@@ -43,28 +61,36 @@ func UnaryIdempotencyInterceptor(idem repository.IdempotencyRepository) grpc.Una
 		txID, err := uuid.FromBytes(out.GetTransactionId())
 		if err != nil {
 			_ = idem.DeleteIdempotency(ctx, key)
-			return nil, status.Errorf(codes.Internal, "invalid transaction_id: %v", err)
+			return nil, status.Errorf(codes.Internal, "invalid transaction_id from handler: %v", err)
 		}
 
-		if err := idem.UpdateIdempotencyStatus(ctx, key, completedStatus(txID)); err != nil {
-			return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
-		}
+		go func(k uuid.UUID, targetStatus entity.IdempotencyStatus) {
+			asyncCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+
+			if err := idem.UpdateIdempotencyStatus(asyncCtx, k, targetStatus); err != nil {
+				logger.WarnContext(asyncCtx, "idempotency: async update failed (fail-open)",
+					"err", err,
+					"key", k,
+					"status", targetStatus,
+				)
+			}
+		}(key, completedStatus(txID))
 
 		return out, nil
 	}
 }
 
-func cachedTransfer(ctx context.Context, idem repository.IdempotencyRepository, key uuid.UUID) (*ledger.TransferResponse, error) {
-	st, err := idem.GetIdempotencyStatus(ctx, key)
-	if err != nil {
-		return nil, status.Errorf(codes.Unavailable, "idempotency: %v", err)
+func handleDuplicate(st entity.IdempotencyStatus) (*ledger.TransferResponse, error) {
+	if st == entity.IDEMPOTENCY_IN_PROCESS {
+		return nil, status.Error(codes.Aborted, entity.ErrIdempotencyInProgress.Error())
 	}
 
 	if txID, ok := parseCompleted(st); ok {
 		return &ledger.TransferResponse{TransactionId: txID[:]}, nil
 	}
 
-	return nil, status.Error(codes.Aborted, entity.ErrIdempotencyInProgress.Error())
+	return nil, status.Error(codes.Internal, "unknown idempotency status in cache")
 }
 
 func completedStatus(txID uuid.UUID) entity.IdempotencyStatus {
