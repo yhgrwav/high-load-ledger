@@ -2,8 +2,10 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"high-load-ledger/internal/domain/entity"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,38 +14,51 @@ import (
 
 const idempotencyKeyTTL = 10 * time.Minute
 
-// key - uuid
-// value - status
+// т.к. идемпотентность у нас используется в hot path - нужно выделить отдельный инстанс для разгрузки
+// пула соединений в кэше, т.к. без этого у меня вместо 3-4к рпс выдаётся 2к ошибок в секунду
+type IdempotencyRepository struct {
+	conn   *redis.Client
+	logger *slog.Logger
+}
 
-// UUID -> formatted string
+func NewIdempotencyRepository(conn *redis.Client, logger *slog.Logger) *IdempotencyRepository {
+	return &IdempotencyRepository{
+		conn:   conn,
+		logger: logger,
+	}
+}
+
 func castKey(idempotencyKey uuid.UUID) string {
-	return fmt.Sprintf("idempotency:%s", idempotencyKey)
+	return fmt.Sprintf("idempotency:%s", idempotencyKey.String())
 }
 
-func (r *CacheRepo) SetAndCheck(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) (bool, error) {
-	exists, err := r.rdb.SetNX(ctx, castKey(idempotencyKey), status, idempotencyKeyTTL).Result()
+func (r *IdempotencyRepository) CheckOrLock(ctx context.Context, key uuid.UUID) (bool, entity.IdempotencyStatus, error) {
+	redisKey := castKey(key)
+
+	result, err := r.conn.SetArgs(ctx, redisKey, string(entity.IDEMPOTENCY_IN_PROCESS), redis.SetArgs{
+		Mode: "NX",
+		Get:  true,
+		TTL:  idempotencyKeyTTL,
+	}).Result()
+
 	if err != nil {
-		r.logger.ErrorContext(ctx, "redis: SetNX internal error", err)
-		return false, err
+		if errors.Is(err, redis.Nil) {
+			return true, entity.IDEMPOTENCY_IN_PROCESS, nil
+		}
+
+		r.logger.ErrorContext(ctx, "redis: internal idempotency error", "err", err, "key", key)
+		return false, entity.IDEMPOTENCY_STATUS_UNSPECIFIED, err
 	}
-	return exists, err
+
+	currentStatus := entity.IdempotencyStatus(result)
+
+	return false, currentStatus, nil
 }
 
-func (r *CacheRepo) GetIdempotencyStatus(ctx context.Context, idempotencyKey uuid.UUID) (entity.IdempotencyStatus, error) {
-	val, err := r.rdb.Get(ctx, castKey(idempotencyKey)).Result()
-	if err == redis.Nil {
-		return entity.IDEMPOTENCY_MISS, nil
-	}
-	if err != nil {
-		return entity.IDEMPOTENCY_STATUS_UNSPECIFIED, err
-	}
-	return entity.IdempotencyStatus(val), nil
+func (r *IdempotencyRepository) UpdateIdempotencyStatus(ctx context.Context, key uuid.UUID, status entity.IdempotencyStatus) error {
+	return r.conn.Set(ctx, castKey(key), string(status), idempotencyKeyTTL).Err()
 }
 
-func (r *CacheRepo) UpdateIdempotencyStatus(ctx context.Context, idempotencyKey uuid.UUID, status entity.IdempotencyStatus) error {
-	return r.rdb.Set(ctx, castKey(idempotencyKey), status, idempotencyKeyTTL).Err()
-}
-
-func (r *CacheRepo) DeleteIdempotency(ctx context.Context, idempotencyKey uuid.UUID) error {
-	return r.rdb.Del(ctx, castKey(idempotencyKey)).Err()
+func (r *IdempotencyRepository) DeleteIdempotency(ctx context.Context, key uuid.UUID) error {
+	return r.conn.Del(ctx, castKey(key)).Err()
 }
