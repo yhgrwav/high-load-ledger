@@ -39,7 +39,7 @@ func (r *CacheRepo) DeleteBalance(ctx context.Context, accountID uuid.UUID) erro
 
 	err := r.rdb.Del(ctx, key).Err()
 	if err != nil {
-		r.logger.ErrorContext(ctx, "redis delete balance error", err)
+		r.logger.ErrorContext(ctx, "redis delete balance error", "err", err)
 		return err
 	}
 	return nil
