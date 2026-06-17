@@ -36,3 +36,7 @@ build.log
 # .idea/
 # .vscode/
 .cursorj/
+
+CLAUDE.md
+
+*.log
