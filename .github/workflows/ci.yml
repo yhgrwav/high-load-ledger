@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ledger
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+          cache: 'go'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run tests
+        run: go test ./internal/usecase/... -v -race
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ledger?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+
+      - name: Build
+        run: |
+          go build -o ./bin/gateway ./cmd/gateway
+          go build -o ./bin/worker ./cmd/worker
+          go build -o ./bin/stats ./cmd/stats
+          go build -o ./bin/loadgen ./cmd/loadgen
+
+  docker:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker images
+        run: |
+          docker build -t ledger-gateway:latest -f Dockerfile.gateway .
+          docker build -t ledger-worker:latest -f Dockerfile.worker .
+          docker build -t ledger-stats:latest -f Dockerfile.stats .
+          docker build -t ledger-loadgen:latest -f Dockerfile.loadgen .
+        continue-on-error: true
