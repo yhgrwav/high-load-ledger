@@ -279,16 +279,3 @@ docker/            — prometheus, grafana, worker, stats, loadgen
 | [LICENSE](LICENSE) | Лицензия |
 
 ---
-
-## Roadmap
-
-- [x] gRPC API, Clean Architecture, миграции
-- [x] Переводы с идемпотентностью
-- [x] PostingWorker (верификация балансов)
-- [x] Prometheus + Grafana, nginx + scale gateway
-- [x] Unit-тесты usecase
-- [x] Load generator (`loadgen/`)
-- [x] Kafka (side-effects → `stats-worker` → Redis)
-- [ ] Integration tests
-- [ ] Kubernetes
-- [ ] OpenTelemetry, шардирование PostgreSQL
