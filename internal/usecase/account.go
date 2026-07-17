@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"log/slog"
@@ -44,9 +45,12 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 
 	balance := int64(rand.Intn(100000000))
 
+	// Insert with zero balance; opening funds (and latest_posting_id) are applied via
+	// CreditBalance after CreatePostings — same fold as TransferUseCase, since CreatePostings
+	// no longer updates accounts itself.
 	account := &entity.Account{
 		ID:        id,
-		Balance:   balance,
+		Balance:   0,
 		Currency:  currency,
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -96,7 +100,16 @@ func (a *AccountUseCase) CreateAccount(ctx context.Context, currency entity.Curr
 		postings := []entity.Posting{
 			{TransactionID: trx.ID, AccountID: id, Amount: balance},
 		}
-		if err = a.repo.CreatePostings(ctx, tx, postings); err != nil {
+		var postingIDs map[uuid.UUID]int64
+		postingIDs, err = a.repo.CreatePostings(ctx, tx, postings)
+		if err != nil {
+			return uuid.Nil, err
+		}
+		postingID, ok := postingIDs[id]
+		if !ok {
+			return uuid.Nil, fmt.Errorf("create account: missing posting id for %s", id)
+		}
+		if err = a.repo.CreditBalance(ctx, tx, id, balance, postingID); err != nil {
 			return uuid.Nil, err
 		}
 	}

@@ -148,7 +148,7 @@ func TestTransferUseCase_Transaction_insufficientFunds(t *testing.T) {
 		&entity.Account{ID: toID, Balance: 0, Currency: entity.CURRENCY_USD},
 	)
 
-	repo.debitBalanceFn = func(context.Context, entity.CustomTx, uuid.UUID, int64) error {
+	repo.debitBalanceFn = func(context.Context, entity.CustomTx, uuid.UUID, int64, int64) error {
 
 		return entity.ErrInsufficientFunds
 
@@ -238,7 +238,7 @@ func TestTransferUseCase_Transaction_success(t *testing.T) {
 		&entity.Account{ID: toID, Balance: 200, Currency: entity.CURRENCY_USD},
 	)
 
-	repo.debitBalanceFn = func(_ context.Context, _ entity.CustomTx, _ uuid.UUID, amount int64) error {
+	repo.debitBalanceFn = func(_ context.Context, _ entity.CustomTx, _ uuid.UUID, amount, _ int64) error {
 
 		debitAmount = amount
 
@@ -246,7 +246,7 @@ func TestTransferUseCase_Transaction_success(t *testing.T) {
 
 	}
 
-	repo.creditBalanceFn = func(_ context.Context, _ entity.CustomTx, _ uuid.UUID, amount int64) error {
+	repo.creditBalanceFn = func(_ context.Context, _ entity.CustomTx, _ uuid.UUID, amount, _ int64) error {
 
 		creditAmount = amount
 

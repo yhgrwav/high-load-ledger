@@ -72,17 +72,23 @@ func (db *Repository) GetCurrencies(ctx context.Context, ids []uuid.UUID) (map[u
 	return result, nil
 }
 
-func (db *Repository) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+// DebitBalance atomically checks and subtracts the balance in one round trip (no separate
+// SELECT ... FOR UPDATE is needed: the conditional UPDATE itself takes the row lock and the
+// WHERE amount >= $1 clause rejects the update if funds are insufficient). postingID folds the
+// ledger.accounts.latest_posting_id bookkeeping into the same statement instead of a second UPDATE.
+func (db *Repository) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error {
 	t, err := db.castTx(ctx, tx)
 	if err != nil {
 		return err
 	}
 
 	query := `UPDATE ledger.accounts
-              SET amount = amount - $1, updated_at = CURRENT_TIMESTAMP
-              WHERE user_id = $2 AND amount >= $1`
+              SET amount = amount - $1,
+                  latest_posting_id = GREATEST(latest_posting_id, $2),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE user_id = $3 AND amount >= $1`
 
-	tag, err := t.Exec(ctx, query, amount, id)
+	tag, err := t.Exec(ctx, query, amount, postingID, id)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to debit balance", "err", err, "id", id)
 		return fmt.Errorf("db: failed to debit balance: %w", err)
@@ -93,17 +99,19 @@ func (db *Repository) DebitBalance(ctx context.Context, tx entity.CustomTx, id u
 	return nil
 }
 
-func (db *Repository) CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+func (db *Repository) CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error {
 	t, err := db.castTx(ctx, tx)
 	if err != nil {
 		return err
 	}
 
 	query := `UPDATE ledger.accounts
-              SET amount = amount + $1, updated_at = CURRENT_TIMESTAMP
-              WHERE user_id = $2`
+              SET amount = amount + $1,
+                  latest_posting_id = GREATEST(latest_posting_id, $2),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE user_id = $3`
 
-	tag, err := t.Exec(ctx, query, amount, id)
+	tag, err := t.Exec(ctx, query, amount, postingID, id)
 	if err != nil {
 		db.logger.ErrorContext(ctx, "db: failed to credit balance", "err", err, "id", id)
 		return fmt.Errorf("db: failed to credit balance: %w", err)
@@ -112,51 +120,4 @@ func (db *Repository) CreditBalance(ctx context.Context, tx entity.CustomTx, id 
 		return entity.ErrAccountNotFound
 	}
 	return nil
-}
-
-func (db *Repository) GetTwoForUpdate(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error) {
-	t, err := db.castTx(ctx, tx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	query := `SELECT user_id, amount, currency, latest_posting_id, updated_at
-             FROM ledger.accounts
-             WHERE user_id IN ($1, $2)
-             ORDER BY user_id
-             FOR UPDATE`
-
-	rows, err := t.Query(ctx, query, fromAccountID, toAccountID)
-	if err != nil {
-		db.logger.ErrorContext(ctx, "db: failed to get account", "err", err)
-		return nil, nil, fmt.Errorf("failed to get account: %w", err)
-	}
-	defer rows.Close()
-
-	var acc1, acc2 entity.Account
-	var found1, found2 bool
-
-	for rows.Next() {
-		var acc entity.Account
-		if err := rows.Scan(&acc.ID, &acc.Balance, &acc.Currency, &acc.LatestPostingID, &acc.UpdatedAt); err != nil {
-			return nil, nil, err
-		}
-		if acc.ID == fromAccountID {
-			acc1 = acc
-			found1 = true
-		} else if acc.ID == toAccountID {
-			acc2 = acc
-			found2 = true
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-
-	if !found1 || !found2 {
-		return nil, nil, entity.ErrAccountNotFound
-	}
-
-	return &acc1, &acc2, nil
 }
