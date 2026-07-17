@@ -85,13 +85,37 @@ func (p *AccountPool) CurrenciesWithAccounts() []gen.Currency {
 	return out
 }
 
-func (p *AccountPool) snapshotCurrency(currency gen.Currency) []ExistingAccount {
+// RandomPair picks two distinct accounts from currency by index under a read lock, without
+// copying the (potentially tens-of-thousands-long) slice for that currency. The dispatch loop
+// that calls this runs on a single goroutine trying to hit thousands of builds/sec — the O(n)
+// copy this replaced (snapshotCurrency) was the actual throughput ceiling, not gRPC/CPU/network:
+// copying ~20-25k structs per call, every call, capped dispatch at ~1.8-2k/s regardless of how
+// many workers or gateway replicas were available downstream.
+func (p *AccountPool) RandomPair(rng randIntn, currency gen.Currency) (from, to ExistingAccount, ok bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	src := p.accounts[currency]
-	out := make([]ExistingAccount, len(src))
-	copy(out, src)
-	return out
+	accounts := p.accounts[currency]
+	if len(accounts) < 2 {
+		return ExistingAccount{}, ExistingAccount{}, false
+	}
+	i, j := randomDistinctIndexes(rng, len(accounts))
+	return accounts[i], accounts[j], true
+}
+
+// RandomAccount picks one account from currency by index under a read lock (see RandomPair).
+func (p *AccountPool) RandomAccount(rng randIntn, currency gen.Currency) (ExistingAccount, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	accounts := p.accounts[currency]
+	if len(accounts) == 0 {
+		return ExistingAccount{}, false
+	}
+	return accounts[rng.Intn(len(accounts))], true
+}
+
+// randIntn is satisfied by *rand.Rand; narrowed so pool.go doesn't need to import math/rand.
+type randIntn interface {
+	Intn(n int) int
 }
 
 // ReserveValid deducts amount from fromID and credits toID in the local model.

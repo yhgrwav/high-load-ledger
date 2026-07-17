@@ -1,0 +1,78 @@
+# Two separate Redis instances on purpose (cache vs idempotency hot path) — see
+# internal/repository/redis/idempotency.go. Keep them as separate Deployments/Services,
+# do not merge into one — that reintroduces the connection-pool contention this split avoids.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels: { app: redis }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # args, not command: preserves the image's docker-entrypoint.sh (see postgres.yaml
+          # for why this distinction matters — same k8s command-vs-ENTRYPOINT gotcha).
+          args: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+          env:
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: REDIS_PASSWORD } } }
+          ports:
+            - containerPort: 6379
+          resources:
+            requests: { cpu: "500m", memory: 512Mi }
+            limits: { cpu: "2", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ledger
+spec:
+  selector: { app: redis }
+  ports:
+    - { port: 6379, targetPort: 6379 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idempotency-redis
+  namespace: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: idempotency-redis }
+  template:
+    metadata:
+      labels: { app: idempotency-redis }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: idempotency-redis
+          image: redis:7-alpine
+          # args, not command: preserves the image's docker-entrypoint.sh (see postgres.yaml
+          # for why this distinction matters — same k8s command-vs-ENTRYPOINT gotcha).
+          args: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+          env:
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: REDIS_PASSWORD } } }
+          ports:
+            - containerPort: 6379
+          resources:
+            requests: { cpu: "500m", memory: 512Mi }
+            limits: { cpu: "2", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: idempotency-redis
+  namespace: ledger
+spec:
+  selector: { app: idempotency-redis }
+  ports:
+    - { port: 6379, targetPort: 6379 }

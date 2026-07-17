@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: ledger
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: gateway
+          image: high-load-ledger-gateway:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: ledger-config }
+          env:
+            - { name: DB_SUPER_USER, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_USER } } }
+            - { name: DB_SUPER_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_PASSWORD } } }
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: REDIS_PASSWORD } } }
+            - { name: IDEMPOTENCY_REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: REDIS_PASSWORD } } }
+          ports:
+            - { name: grpc, containerPort: 50051 }
+            - { name: metrics, containerPort: 6767 }
+          # No gRPC health service is registered in cmd/gateway (see docs caveat) — fall back
+          # to a TCP check on the gRPC port instead of a grpc_health_probe/HTTP check.
+          readinessProbe:
+            tcpSocket: { port: grpc }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: grpc }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # limit matches configmap's GOMAXPROCS=2: Go doesn't read the cgroup CPU limit on its
+          # own, so a GOMAXPROCS/limit mismatch either wastes threads on quota the container
+          # doesn't have (GOMAXPROCS > limit, was 4 vs 1 here) or leaves cores on the table
+          # (GOMAXPROCS < limit). 24 real cores on the node, HPA max 16 replicas: sized so
+          # requests*16=8 cores guaranteed and limits*16=32 is an intentional soft oversubscribe
+          # (bounded by real node capacity, not meant to all land at once).
+          resources:
+            requests: { cpu: "500m", memory: 256Mi }
+            limits: { cpu: "2", memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: ledger
+spec:
+  selector: { app: gateway }
+  ports:
+    - { name: grpc, port: 50051, targetPort: 50051 }
+    - { name: metrics, port: 6767, targetPort: 6767 }
+---
+# Headless (clusterIP: None): DNS returns one A record per pod instead of a single ClusterIP
+# VIP. Needed for client-side gRPC round_robin (see cmd/loadgen/main.go) — with a normal
+# ClusterIP, kube-proxy pins each TCP connection to one backend pod for its lifetime, so a
+# fixed pool of gRPC connections stops using most pods once the HPA scales gateway up. Kept
+# separate from the `gateway` Service above so port-forward/Prometheus scraping (which don't
+# care about per-pod addressing) are unaffected.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-headless
+  namespace: ledger
+spec:
+  clusterIP: None
+  selector: { app: gateway }
+  ports:
+    - { name: grpc, port: 50051, targetPort: 50051 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gateway-hpa
+  namespace: ledger
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gateway
+  minReplicas: 3
+  maxReplicas: 16
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

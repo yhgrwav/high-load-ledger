@@ -1,0 +1,45 @@
+# PostingWorker MUST stay at exactly 1 replica — multiple workers race on the same DB cursor
+# (see CLAUDE.md). Do not add an HPA or bump replicas here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: posting-worker
+  namespace: ledger
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: posting-worker }
+  template:
+    metadata:
+      labels: { app: posting-worker }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: posting-worker
+          image: high-load-ledger-worker:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: ledger-config }
+          env:
+            - { name: DB_SUPER_USER, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_USER } } }
+            - { name: DB_SUPER_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_PASSWORD } } }
+            - { name: DB_MAX_CONNS, valueFrom: { configMapKeyRef: { name: ledger-config, key: POSTING_WORKER_DB_MAX_CONNS } } }
+            - { name: DB_MIN_CONNS, valueFrom: { configMapKeyRef: { name: ledger-config, key: POSTING_WORKER_DB_MIN_CONNS } } }
+            - { name: SERVICE_NAME, value: "ledger-posting-worker" }
+          ports:
+            - { name: metrics, containerPort: 6767 }
+          resources:
+            requests: { cpu: "250m", memory: 128Mi }
+            limits: { cpu: "1", memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: posting-worker
+  namespace: ledger
+spec:
+  selector: { app: posting-worker }
+  ports:
+    - { name: metrics, port: 6767, targetPort: 6767 }

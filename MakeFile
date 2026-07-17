@@ -4,7 +4,11 @@ export PROJECT_ROOT
 SHELL := powershell.exe
 .SHELLFLAGS := -NoProfile -Command
 
-.PHONY: gen migrate-create
+KIND_CLUSTER := ledger
+K8S_NAMESPACE := ledger
+K8S_IMAGES := high-load-ledger-gateway:local high-load-ledger-worker:local high-load-ledger-stats-worker:local high-load-ledger-loadgen:local
+
+.PHONY: gen migrate-create ledgerup ledgerdown
 
 gen:
 	@if (Test-Path gen/go) { Remove-Item -Recurse -Force gen/go }
@@ -14,3 +18,32 @@ gen:
 migrate-create:
 	docker compose run --rm ledger-app-migrate \
 		create -ext sql -dir /migrations -seq $(if $(name),$(name),init_schema)
+
+# Build images -> load into kind -> apply k8s/ (kustomize) -> port-forward -> start loadgen.
+# Idempotent: re-running reuses the existing kind cluster and just rebuilds/reloads images.
+ledgerup:
+	@if (-not (kind get clusters 2>$$null | Select-String -Quiet '^$(KIND_CLUSTER)$$')) { kind create cluster --name $(KIND_CLUSTER) } else { Write-Host "kind cluster '$(KIND_CLUSTER)' already exists" }
+	docker build -t high-load-ledger-gateway:local -f Dockerfile .
+	docker build -t high-load-ledger-worker:local -f docker/worker/Dockerfile .
+	docker build -t high-load-ledger-stats-worker:local -f docker/stats/Dockerfile .
+	docker build -t high-load-ledger-loadgen:local -f docker/loadgen/Dockerfile .
+	@foreach ($$img in "$(K8S_IMAGES)".Split(' ')) { kind load docker-image $$img --name $(KIND_CLUSTER) }
+	@if (-not (kubectl get deployment metrics-server -n kube-system 2>$$null)) { Write-Host '==> installing metrics-server (required for gateway-hpa)...'; kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml; kubectl patch deployment metrics-server -n kube-system --type=json --patch-file=k8s/metrics-server-kind-patch.json; kubectl rollout status deployment/metrics-server -n kube-system --timeout=90s } else { Write-Host '==> metrics-server already installed' }
+	kubectl apply -k k8s/
+	kubectl wait --for=condition=complete job/ledger-app-migrate -n $(K8S_NAMESPACE) --timeout=180s
+	kubectl wait --for=condition=complete job/kafka-init -n $(K8S_NAMESPACE) --timeout=180s
+	kubectl rollout status deployment/gateway -n $(K8S_NAMESPACE) --timeout=180s
+	@New-Item -ItemType Directory -Force -Path .k8s | Out-Null
+	@Start-Process -WindowStyle Hidden -RedirectStandardOutput .k8s/port-forward-grpc.log -RedirectStandardError .k8s/port-forward-grpc-error.log -PassThru kubectl -ArgumentList "port-forward -n $(K8S_NAMESPACE) svc/gateway 50051:50051" | ForEach-Object { $$_.Id } | Out-File .k8s/port-forward-grpc.pid
+	@Start-Process -WindowStyle Hidden -RedirectStandardOutput .k8s/port-forward-prometheus.log -RedirectStandardError .k8s/port-forward-prometheus-error.log -PassThru kubectl -ArgumentList "port-forward -n $(K8S_NAMESPACE) svc/prometheus 19090:9090" | ForEach-Object { $$_.Id } | Out-File .k8s/port-forward-prometheus.pid
+	@Start-Process -WindowStyle Hidden -RedirectStandardOutput .k8s/port-forward-grafana.log -RedirectStandardError .k8s/port-forward-grafana-error.log -PassThru kubectl -ArgumentList "port-forward -n $(K8S_NAMESPACE) svc/grafana 3000:3000" | ForEach-Object { $$_.Id } | Out-File .k8s/port-forward-grafana.pid
+	Write-Host "gRPC: localhost:50051  Prometheus: localhost:19090  Grafana: localhost:3000"
+	kubectl delete job/loadgen -n $(K8S_NAMESPACE) --ignore-not-found
+	kubectl apply -f k8s/loadgen.yaml -n $(K8S_NAMESPACE)
+
+# Delete the ledger namespace and stop the port-forwards started by ledgerup.
+# Does NOT delete the kind cluster itself (prometheus/grafana/postgres services and other
+# unrelated infra pods, if any, are left alone) - use `kind delete cluster --name $(KIND_CLUSTER)` for that.
+ledgerdown:
+	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found
+	@Get-ChildItem .k8s/*.pid -ErrorAction SilentlyContinue | ForEach-Object { $$procId = Get-Content $$_; Stop-Process -Id $$procId -Force -ErrorAction SilentlyContinue; Remove-Item $$_ }

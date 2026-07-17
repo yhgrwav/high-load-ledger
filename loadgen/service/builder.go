@@ -95,13 +95,10 @@ func (b *TransferBuilder) pickFundedPair() (from, to ExistingAccount, ok bool) {
 
 	for attempt := 0; attempt < len(candidates)*4; attempt++ {
 		curr := candidates[b.rng.Intn(len(candidates))]
-		accounts := b.pool.snapshotCurrency(curr)
-		if len(accounts) < 2 {
+		from, to, ok = b.pool.RandomPair(b.rng, curr)
+		if !ok {
 			continue
 		}
-		fromIdx, toIdx := randomDistinctIndexes(b.rng, len(accounts))
-		from = accounts[fromIdx]
-		to = accounts[toIdx]
 		if from.Balance > 0 && from.ID != to.ID {
 			return from, to, true
 		}
@@ -117,12 +114,7 @@ func (b *TransferBuilder) pickSameCurrencyPair() (from, to ExistingAccount, ok b
 	}
 
 	curr := candidates[b.rng.Intn(len(candidates))]
-	accounts := b.pool.snapshotCurrency(curr)
-	if len(accounts) < 2 {
-		return ExistingAccount{}, ExistingAccount{}, false
-	}
-	fromIdx, toIdx := randomDistinctIndexes(b.rng, len(accounts))
-	return accounts[fromIdx], accounts[toIdx], true
+	return b.pool.RandomPair(b.rng, curr)
 }
 
 func (b *TransferBuilder) pickDifferentCurrencyPair() (from, to ExistingAccount, ok bool) {
@@ -144,17 +136,18 @@ func (b *TransferBuilder) pickDifferentCurrencyPair() (from, to ExistingAccount,
 		return ExistingAccount{}, ExistingAccount{}, false
 	}
 
-	fromAccounts := b.pool.snapshotCurrency(fromCurr)
-	toAccounts := b.pool.snapshotCurrency(toCurr)
-	if len(fromAccounts) == 0 || len(toAccounts) == 0 {
+	from, ok = b.pool.RandomAccount(b.rng, fromCurr)
+	if !ok {
 		return ExistingAccount{}, ExistingAccount{}, false
 	}
-	from = fromAccounts[b.rng.Intn(len(fromAccounts))]
-	to = toAccounts[b.rng.Intn(len(toAccounts))]
+	to, ok = b.pool.RandomAccount(b.rng, toCurr)
+	if !ok {
+		return ExistingAccount{}, ExistingAccount{}, false
+	}
 	return from, to, true
 }
 
-func randomDistinctIndexes(rng *rand.Rand, size int) (int, int) {
+func randomDistinctIndexes(rng randIntn, size int) (int, int) {
 	i := rng.Intn(size)
 	j := rng.Intn(size - 1)
 	if j >= i {
