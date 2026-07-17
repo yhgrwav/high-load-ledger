@@ -1,12 +1,16 @@
 package service
 
 import (
+	"math"
 	"math/rand"
 
 	"github.com/google/uuid"
 
 	gen "high-load-ledger/gen/go"
 )
+
+// Always-invalid amount for the insufficient-funds stream (independent of local balance).
+const invalidBalanceAmount int64 = math.MaxInt64 / 4
 
 type TransferJob struct {
 	Kind     string
@@ -15,14 +19,16 @@ type TransferJob struct {
 	To       []byte
 	Amount   int64
 	TxID     uuid.UUID
+	// Reserved marks that AccountPool.ReserveValid already applied this job locally.
+	Reserved bool
 }
 
 type TransferBuilder struct {
-	pool AccountPool
+	pool *AccountPool
 	rng  *rand.Rand
 }
 
-func NewTransferBuilder(pool AccountPool, rng *rand.Rand) *TransferBuilder {
+func NewTransferBuilder(pool *AccountPool, rng *rand.Rand) *TransferBuilder {
 	return &TransferBuilder{pool: pool, rng: rng}
 }
 
@@ -37,12 +43,17 @@ func (b *TransferBuilder) BuildValid() (TransferJob, bool) {
 		amount = b.rng.Int63n(from.Balance-1) + 1
 	}
 
+	if !b.pool.ReserveValid(from.ID, to.ID, amount) {
+		return TransferJob{}, false
+	}
+
 	return TransferJob{
-		Kind:     "valid",
+		Kind:     StreamValid,
 		Currency: from.Currency,
 		From:     from.ID[:],
 		To:       to.ID[:],
 		Amount:   amount,
+		Reserved: true,
 	}, true
 }
 
@@ -52,17 +63,12 @@ func (b *TransferBuilder) BuildInvalidBalance() (TransferJob, bool) {
 		return TransferJob{}, false
 	}
 
-	amount := from.Balance + 1
-	if amount < 1 {
-		amount = 1_000_000_000_000
-	}
-
 	return TransferJob{
-		Kind:     "invalid_balance",
+		Kind:     StreamInvalidBalance,
 		Currency: from.Currency,
 		From:     from.ID[:],
 		To:       to.ID[:],
-		Amount:   amount,
+		Amount:   invalidBalanceAmount,
 	}, true
 }
 
@@ -73,7 +79,7 @@ func (b *TransferBuilder) BuildInvalidCurrency() (TransferJob, bool) {
 	}
 
 	return TransferJob{
-		Kind:     "invalid_currency",
+		Kind:     StreamInvalidCurrency,
 		Currency: from.Currency,
 		From:     from.ID[:],
 		To:       to.ID[:],
@@ -87,9 +93,12 @@ func (b *TransferBuilder) pickFundedPair() (from, to ExistingAccount, ok bool) {
 		return ExistingAccount{}, ExistingAccount{}, false
 	}
 
-	for attempt := 0; attempt < len(candidates)*2; attempt++ {
+	for attempt := 0; attempt < len(candidates)*4; attempt++ {
 		curr := candidates[b.rng.Intn(len(candidates))]
-		accounts := b.pool[curr]
+		accounts := b.pool.snapshotCurrency(curr)
+		if len(accounts) < 2 {
+			continue
+		}
 		fromIdx, toIdx := randomDistinctIndexes(b.rng, len(accounts))
 		from = accounts[fromIdx]
 		to = accounts[toIdx]
@@ -108,7 +117,10 @@ func (b *TransferBuilder) pickSameCurrencyPair() (from, to ExistingAccount, ok b
 	}
 
 	curr := candidates[b.rng.Intn(len(candidates))]
-	accounts := b.pool[curr]
+	accounts := b.pool.snapshotCurrency(curr)
+	if len(accounts) < 2 {
+		return ExistingAccount{}, ExistingAccount{}, false
+	}
 	fromIdx, toIdx := randomDistinctIndexes(b.rng, len(accounts))
 	return accounts[fromIdx], accounts[toIdx], true
 }
@@ -132,8 +144,13 @@ func (b *TransferBuilder) pickDifferentCurrencyPair() (from, to ExistingAccount,
 		return ExistingAccount{}, ExistingAccount{}, false
 	}
 
-	from = b.pool[fromCurr][b.rng.Intn(len(b.pool[fromCurr]))]
-	to = b.pool[toCurr][b.rng.Intn(len(b.pool[toCurr]))]
+	fromAccounts := b.pool.snapshotCurrency(fromCurr)
+	toAccounts := b.pool.snapshotCurrency(toCurr)
+	if len(fromAccounts) == 0 || len(toAccounts) == 0 {
+		return ExistingAccount{}, ExistingAccount{}, false
+	}
+	from = fromAccounts[b.rng.Intn(len(fromAccounts))]
+	to = toAccounts[b.rng.Intn(len(toAccounts))]
 	return from, to, true
 }
 

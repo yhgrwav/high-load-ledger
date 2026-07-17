@@ -156,9 +156,11 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 
 	// когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
 	if t.publisher != nil {
-		if err := t.publisher.PublishTransaction(ctx, trx); err != nil {
-			t.logger.ErrorContext(ctx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
-		}
+		go func() {
+			if err := t.publisher.PublishTransaction(ctx, trx); err != nil {
+				t.logger.ErrorContext(ctx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
+			}
+		}()
 	}
 
 	return trx.ID, nil

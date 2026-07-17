@@ -43,17 +43,32 @@ func main() {
 		metrics.Stop(shutdownCtx)
 	}()
 
-	conn, err := grpc.NewClient(
-		cfg.GRPCAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		log.Fatalf("grpc dial: %v", err)
+	connCount := cfg.GRPCConnections
+	if connCount < 1 {
+		connCount = 1
 	}
-	defer conn.Close()
 
-	acc := service.NewAccountService(conn, cfg.BootstrapWorkers)
-	tx := service.NewTxManager(conn)
+	conns := make([]*grpc.ClientConn, 0, connCount)
+	for i := 0; i < connCount; i++ {
+		conn, err := grpc.NewClient(
+			cfg.GRPCAddr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithDefaultCallOptions(grpc.WaitForReady(true)),
+		)
+		if err != nil {
+			log.Fatalf("grpc dial %d/%d: %v", i+1, connCount, err)
+		}
+		conns = append(conns, conn)
+	}
+	defer func() {
+		for _, conn := range conns {
+			_ = conn.Close()
+		}
+	}()
+	log.Printf("loadgen: grpc connections=%d addr=%s", connCount, cfg.GRPCAddr)
+
+	acc := service.NewAccountService(conns[0], cfg.BootstrapWorkers)
+	tx := service.NewTxManager(conns...)
 	core := service.NewCoreService(cfg, tx, acc, metrics)
 
 	ctx, cancel := context.WithCancel(context.Background())
