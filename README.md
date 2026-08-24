@@ -2,7 +2,7 @@
 
 Ядро платёжной системы на Go: gRPC API, идемпотентные переводы (Redis + PostgreSQL), фоновая сверка балансов.
 
-**Стек:** Go · gRPC · Protobuf · PostgreSQL 18 · Redis · Kafka · Docker · Prometheus · Grafana
+**Стек:** Go · gRPC · Protobuf · PostgreSQL 18 · Redis · Kafka · Nginx · golang-migrate · Docker · Prometheus · Grafana
 
 ---
 
@@ -126,7 +126,8 @@ docker compose down
 | Prometheus UI | `http://localhost:19090` | |
 | Grafana | `http://localhost:3000` | login: `admin` / `admin` |
 | PostgreSQL | `localhost:5433` | PostgreSQL 18 |
-| Redis | `localhost:6379` | идемпотентность, кэш транзакций |
+| Redis | `localhost:6379` | кэш балансов, кэш транзакций |
+| Idempotency Redis | `localhost:6377` | отдельный инстанс под идемпотентность (hot path), см. `IDEMPOTENCY_REDIS_PORT` |
 | Kafka | `localhost:9092` | события `completed_transactions` |
 
 Метрики gateway (`/metrics`) доступны внутри Docker-сети; Prometheus собирает их со всех реплик через DNS service discovery.
@@ -238,7 +239,7 @@ Posting Worker — фоновая сверка `accounts.amount` с суммой
 go test ./internal/usecase/... -v   # unit-тесты
 go run ./cmd/gateway               # gRPC API
 go run ./cmd/worker                # posting worker (отдельный терминал)
-make gen                            # protobuf (нужен protoc)
+make -f MakeFile gen                # protobuf (нужен protoc; файл называется MakeFile)
 ```
 
 Структура:
