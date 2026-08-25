@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ledger
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres.yaml
+  - redis.yaml
+  - kafka.yaml
+  - migrate-job.yaml
+  - gateway.yaml
+  - worker.yaml
+  - stats.yaml
+  - prometheus.yaml
+  - grafana.yaml
+  - exporters.yaml
+
+configMapGenerator:
+  # `kubectl apply -k` refuses to read files outside this directory (kustomize's load
+  # restrictor), so these are mirrored copies of /migrations/*.sql and /docker/grafana/*, not
+  # symlinks/references. Keep them in sync by hand when you touch the originals —
+  # `make -f MakeFile ledgerup` does not do this for you.
+  - name: ledger-migrations
+    files:
+      - migrations/000001_init_schema.up.sql
+      - migrations/000001_init_schema.down.sql
+  - name: grafana-datasources
+    files:
+      - grafana/datasource.yml
+  - name: grafana-dashboards-provider
+    files:
+      - grafana/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - grafana/dashboards/go_runtime.json
+      - grafana/dashboards/infrastructure.json
+      - grafana/dashboards/ledger.json
+      - grafana/dashboards/loadgen.json

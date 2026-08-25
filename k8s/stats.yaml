@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stats-worker
+  namespace: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: stats-worker }
+  template:
+    metadata:
+      labels: { app: stats-worker }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: stats-worker
+          image: high-load-ledger-stats-worker:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: ledger-config }
+          env:
+            - { name: REDIS_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: REDIS_PASSWORD } } }
+            - { name: LOG_LEVEL, value: "info" }
+          resources:
+            requests: { cpu: "250m", memory: 128Mi }
+            limits: { cpu: "1", memory: 256Mi }

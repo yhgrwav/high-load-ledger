@@ -1,0 +1,83 @@
+# Scoped down vs docker/prometheus/prometheus.yml: dns_sd_configs (used there to discover all
+# scaled gateway containers by DNS A-record) doesn't fan out to pods the same way in k8s — a
+# ClusterIP Service name resolves to one VIP, not one A-record per pod. Scraping the Service
+# still works, kube-proxy just picks a different backend pod per scrape rather than Prometheus
+# seeing all of them individually. Per-pod scraping would need a headless Service + relabeling,
+# left out here to keep this manifest set from ballooning further.
+# nginx-exporter is not deployed (no nginx in this topology - Service + HPA replace it).
+# postgres-exporter/redis-exporter are deployed in k8s/exporters.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: ledger
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 10s
+      evaluation_interval: 10s
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: ledger-gateway
+        static_configs:
+          - targets: ['gateway:6767']
+
+      - job_name: ledger-posting-worker
+        static_configs:
+          - targets: ['posting-worker:6767']
+
+      - job_name: loadgen
+        static_configs:
+          - targets: ['loadgen:9092']
+
+      - job_name: postgres
+        static_configs:
+          - targets: ['postgres-exporter:9187']
+
+      - job_name: redis
+        static_configs:
+          - targets: ['redis-exporter:9121']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prometheus }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.11.3
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus }
+          resources:
+            requests: { cpu: "250m", memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+      volumes:
+        - { name: config, configMap: { name: prometheus-config } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: ledger
+spec:
+  selector: { app: prometheus }
+  ports:
+    - { port: 9090, targetPort: 9090 }

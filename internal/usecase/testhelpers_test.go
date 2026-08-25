@@ -47,11 +47,10 @@ type mockTransferRepo struct {
 	rollbackTxFn         func(ctx context.Context, tx entity.CustomTx) error
 	getByIDFn            func(ctx context.Context, id uuid.UUID) (*entity.Account, error)
 	getCurrenciesFn      func(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]entity.Currency, error)
-	debitBalanceFn       func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
-	creditBalanceFn      func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error
-	getTwoForUpdateFn    func(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error)
+	debitBalanceFn       func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error
+	creditBalanceFn      func(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error
 	createTransactionFn  func(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error
-	createPostingsFn     func(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error
+	createPostingsFn     func(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) (map[uuid.UUID]int64, error)
 	getTransactionByIDFn func(ctx context.Context, id uuid.UUID) (*entity.Transaction, error)
 }
 
@@ -90,25 +89,18 @@ func (m *mockTransferRepo) GetCurrencies(ctx context.Context, ids []uuid.UUID) (
 	return nil, nil
 }
 
-func (m *mockTransferRepo) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+func (m *mockTransferRepo) DebitBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error {
 	if m.debitBalanceFn != nil {
-		return m.debitBalanceFn(ctx, tx, id, amount)
+		return m.debitBalanceFn(ctx, tx, id, amount, postingID)
 	}
 	return nil
 }
 
-func (m *mockTransferRepo) CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount int64) error {
+func (m *mockTransferRepo) CreditBalance(ctx context.Context, tx entity.CustomTx, id uuid.UUID, amount, postingID int64) error {
 	if m.creditBalanceFn != nil {
-		return m.creditBalanceFn(ctx, tx, id, amount)
+		return m.creditBalanceFn(ctx, tx, id, amount, postingID)
 	}
 	return nil
-}
-
-func (m *mockTransferRepo) GetTwoForUpdate(ctx context.Context, tx entity.CustomTx, fromAccountID, toAccountID uuid.UUID) (*entity.Account, *entity.Account, error) {
-	if m.getTwoForUpdateFn != nil {
-		return m.getTwoForUpdateFn(ctx, tx, fromAccountID, toAccountID)
-	}
-	return &entity.Account{ID: fromAccountID, Balance: 1_000_000}, &entity.Account{ID: toAccountID}, nil
 }
 
 func (m *mockTransferRepo) CreateTransaction(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error {
@@ -118,11 +110,11 @@ func (m *mockTransferRepo) CreateTransaction(ctx context.Context, tx entity.Cust
 	return nil
 }
 
-func (m *mockTransferRepo) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error {
+func (m *mockTransferRepo) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) (map[uuid.UUID]int64, error) {
 	if m.createPostingsFn != nil {
 		return m.createPostingsFn(ctx, tx, postings)
 	}
-	return nil
+	return nil, nil
 }
 
 func (m *mockTransferRepo) GetTransactionByID(ctx context.Context, id uuid.UUID) (*entity.Transaction, error) {
@@ -150,7 +142,7 @@ type mockAccountRepo struct {
 	rollbackTxFn        func(ctx context.Context, tx entity.CustomTx) error
 	createAccountFn     func(ctx context.Context, tx entity.CustomTx, acc *entity.Account) error
 	createTransactionFn func(ctx context.Context, tx entity.CustomTx, tr *entity.Transaction) error
-	createPostingsFn    func(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error
+	createPostingsFn    func(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) (map[uuid.UUID]int64, error)
 	getByIDFn           func(ctx context.Context, id uuid.UUID) (*entity.Account, error)
 }
 
@@ -189,11 +181,15 @@ func (m *mockAccountRepo) CreateTransaction(ctx context.Context, tx entity.Custo
 	return nil
 }
 
-func (m *mockAccountRepo) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error {
+func (m *mockAccountRepo) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) (map[uuid.UUID]int64, error) {
 	if m.createPostingsFn != nil {
 		return m.createPostingsFn(ctx, tx, postings)
 	}
-	return nil
+	ids := make(map[uuid.UUID]int64, len(postings))
+	for i, p := range postings {
+		ids[p.AccountID] = int64(i + 1)
+	}
+	return ids, nil
 }
 
 func (m *mockAccountRepo) GetByID(ctx context.Context, id uuid.UUID) (*entity.Account, error) {
@@ -207,16 +203,12 @@ func (m *mockAccountRepo) GetCurrencies(context.Context, []uuid.UUID) (map[uuid.
 	return nil, nil
 }
 
-func (m *mockAccountRepo) DebitBalance(context.Context, entity.CustomTx, uuid.UUID, int64) error {
+func (m *mockAccountRepo) DebitBalance(context.Context, entity.CustomTx, uuid.UUID, int64, int64) error {
 	return nil
 }
 
-func (m *mockAccountRepo) CreditBalance(context.Context, entity.CustomTx, uuid.UUID, int64) error {
+func (m *mockAccountRepo) CreditBalance(context.Context, entity.CustomTx, uuid.UUID, int64, int64) error {
 	return nil
-}
-
-func (m *mockAccountRepo) GetTwoForUpdate(context.Context, entity.CustomTx, uuid.UUID, uuid.UUID) (*entity.Account, *entity.Account, error) {
-	return nil, nil, entity.ErrAccountNotFound
 }
 
 func (m *mockAccountRepo) GetTransactionByID(context.Context, uuid.UUID) (*entity.Transaction, error) {

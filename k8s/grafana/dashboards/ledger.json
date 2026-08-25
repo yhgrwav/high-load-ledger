@@ -1,0 +1,88 @@
+{
+  "uid": "ledger-business-metrics",
+  "title": "Ledger",
+  "tags": ["ledger"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 4,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Transfer success/failure (business result)",
+      "description": "Outcomes inside Transfer use case on gateway. Filter: job=ledger-gateway.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ledger_transfer_total{job=\"ledger-gateway\"}[1m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }
+      }
+    },
+    {
+      "id": 5,
+      "title": "RPS (All gRPC / sec by RPC)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ledger_grpc_requests_total{job=\"ledger-gateway\"}[1m])) by (rpc, code)",
+          "legendFormat": "{{rpc}} {{code}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean"] }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Transfer p99 latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(ledger_grpc_request_duration_seconds_bucket{job=\"ledger-gateway\", rpc=\"Transfer\", code=\"OK\"}[1m])) by (le))",
+          "legendFormat": "p99 OK"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.99, sum(rate(ledger_grpc_request_duration_seconds_bucket{job=\"ledger-gateway\", rpc=\"Transfer\"}[1m])) by (le))",
+          "legendFormat": "p99 all codes"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    },
+    {
+      "id": 6,
+      "title": "Posting worker: balance corrections",
+      "description": "Increases only when worker fixes a drift. Zero is healthy.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "increase(ledger_posting_worker_balance_corrections_total{job=\"ledger-posting-worker\"}[1m])",
+          "legendFormat": "corrections / 1m"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } }
+    }
+  ]
+}

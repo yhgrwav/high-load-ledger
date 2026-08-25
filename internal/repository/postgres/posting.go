@@ -8,66 +8,59 @@ import (
 	"github.com/google/uuid"
 )
 
-func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) error {
+// CreatePostings inserts the given postings and returns the generated posting id per account,
+// so the caller can fold latest_posting_id into the same UPDATE that adjusts the balance
+// (see DebitBalance/CreditBalance) instead of running a separate UPDATE over the same rows.
+func (db *Repository) CreatePostings(ctx context.Context, tx entity.CustomTx, postings []entity.Posting) (map[uuid.UUID]int64, error) {
 	tr, err := db.castTx(ctx, tx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var query string
 	var args []any
 
-	// нашел идеальный вариант реализации этого метода, в общем логика завязывается на длине postings,
-	// т.е. если нам прилетает всего лишь один posting - делаем единичную вставку, если длина 2 - делаем
-	// двойную вставку. Мне к сожалению не хватило мозгов так красиво расписать эту идею в коде, но в целом
-	// 2 промпта всё исправили и я получил буквально то, о чём мечтал в реализации этого метода.
-	// по итогу этот метод является хорошей точкой оптимизации основного метода транзакции, т.к. мы теперь
-	// записываем 2 постинга за один сетевой вызов, а как мне сказал мой опытный знакомый - главная проблема
-	// сложных систем - сетевые задержки, соответственно нужно избегать лишних запросов, соединений и тд.
-	// вообще по сути своей если бы мой проект запускался по канону на разных серверах, в разных уголках планеты
-	// с разным пингом - у меня бы и 200 рпс на один инстанс врядли вышел бы, но пока я буду с нулевой задержкой
-	// пытаться высосать из этого кода хотя бы 600 рпс на локалке, что звучит вполне возможно.
-
 	switch len(postings) {
 	case 1:
-		query = `
-			WITH inserted AS (
-				INSERT INTO ledger.postings (transaction_id, account_id, amount)
-				VALUES ($1, $2, $3)
-				RETURNING id, account_id
-			)
-			UPDATE ledger.accounts a
-			SET latest_posting_id = GREATEST(a.latest_posting_id, i.id),
-			    updated_at = CURRENT_TIMESTAMP
-			FROM inserted i
-			WHERE a.user_id = i.account_id`
+		query = `INSERT INTO ledger.postings (transaction_id, account_id, amount)
+			VALUES ($1, $2, $3)
+			RETURNING id, account_id`
 		args = []any{postings[0].TransactionID, postings[0].AccountID, postings[0].Amount}
 	case 2:
-		query = `
-			WITH inserted AS (
-				INSERT INTO ledger.postings (transaction_id, account_id, amount)
-				VALUES ($1, $2, $3), ($4, $5, $6)
-				RETURNING id, account_id
-			)
-			UPDATE ledger.accounts a
-			SET latest_posting_id = GREATEST(a.latest_posting_id, i.id),
-			    updated_at = CURRENT_TIMESTAMP
-			FROM inserted i
-			WHERE a.user_id = i.account_id`
+		query = `INSERT INTO ledger.postings (transaction_id, account_id, amount)
+			VALUES ($1, $2, $3), ($4, $5, $6)
+			RETURNING id, account_id`
 		args = []any{
 			postings[0].TransactionID, postings[0].AccountID, postings[0].Amount,
 			postings[1].TransactionID, postings[1].AccountID, postings[1].Amount,
 		}
 	default:
-		return nil
+		return nil, nil
 	}
 
-	if _, err := tr.Exec(ctx, query, args...); err != nil {
+	rows, err := tr.Query(ctx, query, args...)
+	if err != nil {
 		db.logger.ErrorContext(ctx, "db: create postings failed", "err", err)
-		return fmt.Errorf("db: create postings failed: %w", err)
+		return nil, fmt.Errorf("db: create postings failed: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make(map[uuid.UUID]int64, len(postings))
+	for rows.Next() {
+		var id int64
+		var accountID uuid.UUID
+		if err := rows.Scan(&id, &accountID); err != nil {
+			db.logger.ErrorContext(ctx, "db: scan created posting failed", "err", err)
+			return nil, fmt.Errorf("db: scan created posting failed: %w", err)
+		}
+		ids[accountID] = id
+	}
+	if err := rows.Err(); err != nil {
+		db.logger.ErrorContext(ctx, "db: rows created postings failed", "err", err)
+		return nil, fmt.Errorf("db: rows created postings failed: %w", err)
 	}
 
-	return nil
+	return ids, nil
 }
 
 func (db *Repository) ListPostingsByAccountID(ctx context.Context, accountID uuid.UUID, limit, offset int) ([]entity.Posting, error) {

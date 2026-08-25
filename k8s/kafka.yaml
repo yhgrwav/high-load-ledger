@@ -1,0 +1,76 @@
+# Single-broker KRaft mode — same as docker-compose, not meant to survive node loss.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: kafka }
+  template:
+    metadata:
+      labels: { app: kafka }
+    spec:
+      enableServiceLinks: false
+      hostname: kafka
+      containers:
+        - name: kafka
+          image: confluentinc/confluent-local:7.6.0
+          env:
+            - { name: KAFKA_NODE_ID, value: "1" }
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT" }
+            - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092" }
+            - { name: KAFKA_LISTENERS, value: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092" }
+            - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT" }
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
+            - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@kafka:29093" }
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0" }
+            - { name: KAFKA_LOG_DIRS, value: "/tmp/kraft-combined-logs" }
+            - { name: CLUSTER_ID, value: "MkU3OEVBNTcwNTJENDM2Qk" }
+          ports:
+            - { containerPort: 29092 }
+            - { containerPort: 29093 }
+          resources:
+            requests: { cpu: "500m", memory: 1Gi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: ledger
+spec:
+  selector: { app: kafka }
+  ports:
+    - { name: broker, port: 29092, targetPort: 29092 }
+    - { name: controller, port: 29093, targetPort: 29093 }
+---
+# One-shot topic creation, mirrors the kafka-init service in docker-compose.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: ledger
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      enableServiceLinks: false
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-init
+          image: confluentinc/confluent-local:7.6.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists \
+                --topic "$KAFKA_TOPIC" --partitions 3 --replication-factor 1; do
+                echo "kafka not ready yet, retrying in 3s..."; sleep 3
+              done
+          env:
+            - { name: KAFKA_TOPIC, valueFrom: { configMapKeyRef: { name: ledger-config, key: KAFKA_TOPIC } } }

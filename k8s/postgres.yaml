@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ledger
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: ledger
+data:
+  init.sql: |
+    CREATE USER default_user WITH PASSWORD 'password';
+    GRANT ALL PRIVILEGES ON DATABASE ledger TO default_user;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ledger
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # single instance + RWO PVC: never run two pods at once
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: postgres
+          image: postgres:18-alpine
+          # `args`, not `command`: k8s `command` maps to the image's ENTRYPOINT, not CMD.
+          # postgres:18-alpine's ENTRYPOINT is docker-entrypoint.sh (drops root -> postgres user,
+          # runs initdb). Overriding it with `command` bypassed that script entirely and the
+          # postgres binary tried to run as root, which it refuses to do.
+          args:
+            - postgres
+            - -c
+            - max_connections=$(PG_MAX_CONNECTIONS)
+            - -c
+            - shared_buffers=$(PG_SHARED_BUFFERS)
+            - -c
+            - synchronous_commit=$(PG_SYNCHRONOUS_COMMIT)
+          envFrom:
+            - configMapRef: { name: ledger-config }
+          env:
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ledger-secrets, key: DB_SUPER_PASSWORD } } }
+            - { name: POSTGRES_DB, valueFrom: { configMapKeyRef: { name: ledger-config, key: DB_NAME } } }
+            - { name: POSTGRES_HOST_AUTH_METHOD, value: "trust" }
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d }
+          resources:
+            requests: { cpu: "4", memory: 2Gi }
+            limits: { cpu: "16", memory: 4Gi }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"] }
+            periodSeconds: 2
+            failureThreshold: 10
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"] }
+            periodSeconds: 10
+      volumes:
+        - { name: data, persistentVolumeClaim: { claimName: postgres-data } }
+        - { name: initdb, configMap: { name: postgres-initdb } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ledger
+spec:
+  selector: { app: postgres }
+  ports:
+    - { port: 5432, targetPort: 5432 }

@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// maxCatchUp limits how far a stream may burst after backpressure.
+// Without any catch-up, a full job queue permanently collapses target RPS.
+const maxCatchUp = 250 * time.Millisecond
+
 func poissonDelay(rng *rand.Rand, rps float64) time.Duration {
 	u := rng.Float64()
 	if u <= 0 {
@@ -29,6 +33,7 @@ func runPoissonStream(
 	rps float64,
 	jobs chan<- TransferJob,
 	build func() (TransferJob, bool),
+	drop func(TransferJob),
 	metrics *Metrics,
 	stats *LoadStats,
 ) {
@@ -52,20 +57,32 @@ func runPoissonStream(
 		}
 
 		job, ok := build()
-		if ok {
-			job.Kind = stream
+		if !ok {
+			// Do not burn a rate token when we failed to build a job (empty pool / no funded pair).
 			select {
-			case jobs <- job:
-				metrics.RecordDispatched(stream)
-				stats.RecordDispatched(stream)
 			case <-ctx.Done():
 				return
+			case <-time.After(time.Millisecond):
 			}
+			continue
+		}
+
+		job.Kind = stream
+		select {
+		case jobs <- job:
+			metrics.RecordDispatched(stream)
+			stats.RecordDispatched(stream)
+		case <-ctx.Done():
+			if drop != nil {
+				drop(job)
+			}
+			return
 		}
 
 		nextAt = nextAt.Add(poissonDelay(rng, rps))
-		if nextAt.Before(time.Now()) {
-			nextAt = time.Now()
+		// Bound catch-up instead of hard-resetting to now (old reset permanently under-dispatched).
+		if lag := time.Since(nextAt); lag > maxCatchUp {
+			nextAt = time.Now().Add(-maxCatchUp)
 		}
 	}
 }

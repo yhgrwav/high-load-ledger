@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# kind/k8s local port-forward state (pids, logs)
+.k8s/
+
 # debug / agent artifacts
 debug-*.log
 postgres_logs_debug.txt

@@ -1,0 +1,39 @@
+# One-shot load run (restart: "no" in docker-compose maps to a Job here, not a Deployment).
+# Deliberately NOT in kustomization.yaml's resources list: `kubectl apply -k k8s/` should bring
+# up the stack without immediately firing a load test against it. `make -f MakeFile ledgerup`
+# applies this file explicitly as its last step, after gateway/kafka/postgres are ready.
+# To rerun manually: `kubectl delete job/loadgen -n ledger --ignore-not-found && kubectl apply -f k8s/loadgen.yaml`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loadgen
+  namespace: ledger
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: loadgen }
+    spec:
+      enableServiceLinks: false
+      restartPolicy: Never
+      containers:
+        - name: loadgen
+          image: high-load-ledger-loadgen:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: { name: ledger-config }
+          ports:
+            - { name: metrics, containerPort: 9092 }
+          resources:
+            requests: { cpu: "1", memory: 256Mi }
+            limits: { cpu: "4", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadgen
+  namespace: ledger
+spec:
+  selector: { app: loadgen }
+  ports:
+    - { name: metrics, port: 9092, targetPort: 9092 }

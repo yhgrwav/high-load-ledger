@@ -1,16 +1,21 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"high-load-ledger/internal/domain/entity"
 	"high-load-ledger/internal/domain/repository"
 	"high-load-ledger/internal/infra/telemetry"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// kafkaPublishTimeout bounds the detached (request-independent) publish that runs after commit.
+const kafkaPublishTimeout = 3 * time.Second
 
 type transferRepo interface {
 	repository.TransactionRepository
@@ -119,46 +124,60 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 		{TransactionID: trx.ID, AccountID: req.ToAccountID, Amount: req.Amount},
 	}
 
-	// 7. отправляем записи в базу
-	if err = t.repo.CreatePostings(ctx, tx, postings); err != nil {
-		return uuid.Nil, err
-	}
-
-	// 8. получаем аккаунты (выполняя блокировку)
-	fromAcc, _, err := t.repo.GetTwoForUpdate(ctx, tx, req.FromAccountID, req.ToAccountID)
+	// 7. отправляем записи в базу и получаем id постингов, чтобы сразу проставить их в accounts
+	postingIDs, err := t.repo.CreatePostings(ctx, tx, postings)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	// 9. затем проверяем аккаунт отправителя на нехватку денег
-	if fromAcc.Balance < req.Amount {
-		return uuid.Nil, entity.ErrInsufficientFunds
+	// 8. списание/зачисление без отдельного SELECT ... FOR UPDATE: недостаток средств ловит
+	// сам DebitBalance атомарным условным UPDATE (WHERE amount >= $1), а latest_posting_id
+	// проставляется тем же UPDATE через postingIDs, так что на 2 строки accounts всего 2
+	// UPDATE-а вместо трёх.
+	// Порядок операций фиксируем по возрастанию UUID аккаунта (а не по from/to), чтобы у двух
+	// конкурентных встречных переводов (A->B и B->A) был единый порядок блокировки строк и
+	// не возникал deadlock.
+	type balanceOp struct {
+		accountID uuid.UUID
+		isDebit   bool
+	}
+	ops := [2]balanceOp{
+		{req.FromAccountID, true},
+		{req.ToAccountID, false},
+	}
+	if bytes.Compare(ops[1].accountID[:], ops[0].accountID[:]) < 0 {
+		ops[0], ops[1] = ops[1], ops[0]
 	}
 
-	// если всё ок {
-
-	// 10. снимаем у отправителя
-	if err = t.repo.DebitBalance(ctx, tx, req.FromAccountID, req.Amount); err != nil {
-		return uuid.Nil, err
+	for _, op := range ops {
+		postingID := postingIDs[op.accountID]
+		if op.isDebit {
+			err = t.repo.DebitBalance(ctx, tx, op.accountID, req.Amount, postingID)
+		} else {
+			err = t.repo.CreditBalance(ctx, tx, op.accountID, req.Amount, postingID)
+		}
+		if err != nil {
+			return uuid.Nil, err
+		}
 	}
 
-	// 11. добавляем получателю
-	if err = t.repo.CreditBalance(ctx, tx, req.ToAccountID, req.Amount); err != nil {
-		return uuid.Nil, err
-	}
-
-	//}
-
-	// 12. если всё прошло успешно - коммитим транзакцию
+	// 9. если всё прошло успешно - коммитим транзакцию
 	if err = t.repo.CommitTx(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
 
-	// когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией и на основе полученных данных loadgen выполняет свою логику
+	// когда всё ок - паблишер отправляет сообщение с закоммиченной транзакцией. Публикация идёт
+	// в отдельной горутине с собственным контекстом (не производным от ctx запроса), потому что
+	// grpc-go отменяет ctx хендлера сразу после возврата из Transaction — использование ctx тут
+	// приводило к "context canceled" под нагрузкой, хотя транзакция уже была закоммичена.
 	if t.publisher != nil {
-		if err := t.publisher.PublishTransaction(ctx, trx); err != nil {
-			t.logger.ErrorContext(ctx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
-		}
+		go func(trx entity.Transaction) {
+			pubCtx, cancel := context.WithTimeout(context.Background(), kafkaPublishTimeout)
+			defer cancel()
+			if err := t.publisher.PublishTransaction(pubCtx, trx); err != nil {
+				t.logger.ErrorContext(pubCtx, "transfer: kafka publish failed", "err", err, "transaction_id", trx.ID)
+			}
+		}(trx)
 	}
 
 	return trx.ID, nil
@@ -182,17 +201,23 @@ func (t *TransferUseCase) validateRequest(req entity.TransactionRequest) error {
 
 func (t *TransferUseCase) validateTransferCurrencies(ctx context.Context, fromID, toID uuid.UUID, currency entity.Currency) error {
 	var fromCurrency, toCurrency entity.Currency
-	var err error
 
-	// сначала проверяем валюту
-	fromCurrency, err = t.cache.GetAccountCurrency(ctx, fromID)
-	if err != nil || fromCurrency == entity.CURRENCY_UNSPECIFIED {
-		fromCurrency = entity.CURRENCY_UNSPECIFIED
-	}
-	toCurrency, err = t.cache.GetAccountCurrency(ctx, toID)
-	if err != nil || toCurrency == entity.CURRENCY_UNSPECIFIED {
-		toCurrency = entity.CURRENCY_UNSPECIFIED
-	}
+	// оба запроса в кэш независимы, гоняем их параллельно вместо двух последовательных round-trip'ов
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if c, err := t.cache.GetAccountCurrency(ctx, fromID); err == nil {
+			fromCurrency = c
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if c, err := t.cache.GetAccountCurrency(ctx, toID); err == nil {
+			toCurrency = c
+		}
+	}()
+	wg.Wait()
 
 	// если нет в кэше - идём в базу
 	missingIDs := make([]uuid.UUID, 0, 2)
