@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS ledger.postings (
     amount BIGINT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_postings_account_id ON ledger.postings (account_id);
 CREATE INDEX IF NOT EXISTS idx_postings_account_id_id ON ledger.postings (account_id, id);
 CREATE INDEX IF NOT EXISTS idx_transactions_from_to ON ledger.transactions (user_from, user_to);
 
