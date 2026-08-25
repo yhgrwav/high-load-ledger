@@ -49,7 +49,11 @@ func main() {
 		Password: redisCfg.Password,
 		DB:       redisCfg.DB,
 	})
-	defer rdb.Close()
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			lgr.Error("redis close failed", "err", err)
+		}
+	}()
 
 	if err := rdb.Ping(initCtx).Err(); err != nil {
 		lgr.Error("redis ping failed", "err", err)
@@ -64,7 +68,11 @@ func main() {
 		Topic:   kafkaCfg.Topic,
 		GroupID: kafkaCfg.GroupID,
 	})
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			lgr.Error("kafka reader close failed", "err", err)
+		}
+	}()
 
 	consumer := kafkainfra.NewConsumer(reader, lgr)
 

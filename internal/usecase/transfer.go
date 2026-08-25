@@ -52,7 +52,7 @@ func (t *TransferUseCase) Transaction(ctx context.Context, req entity.Transactio
 			return
 		}
 
-		status := "success"
+		var status string
 		switch {
 		case err == nil:
 			status = "success"
